@@ -102,7 +102,15 @@ def load_config() -> list[dict[str, str]]:
     with CONFIG_CSV.open(encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get("enabled", "").lower() == "true":
+            # Skip comment lines (# ...) and rows with missing 'board' field
+            board = row.get("board")
+            if not board or board.strip().startswith("#"):
+                continue
+            # Skip rows with missing 'enabled' field
+            enabled = row.get("enabled")
+            if not enabled:
+                continue
+            if enabled.lower() == "true":
                 rows.append(row)
     return rows
 
