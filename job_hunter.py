@@ -326,7 +326,12 @@ def run_scan(
         location_filter = q.get("location_filter", "")
         print(f"🔍 [{stats['queries']}] {query_text} ({location_filter or 'any'})")
 
-        results = tavily_search(query_text, tavily_key)
+        if dry_run:
+            # Dry-run: skip network calls entirely
+            print(f"   [dry-run] skipped API call")
+            results = []
+        else:
+            results = tavily_search(query_text, tavily_key)
         stats["results"] += len(results)
 
         for r in results:
