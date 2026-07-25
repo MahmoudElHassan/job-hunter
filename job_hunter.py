@@ -273,22 +273,38 @@ def append_listing(row: dict[str, str]) -> None:
 
 
 def send_telegram(text: str, bot_token: str, chat_id: str) -> bool:
-    """Send a message via Telegram Bot API. Returns True on success."""
+    """Send a message via Telegram Bot API. Returns True on success.
+
+    Strategy: try Markdown first, fall back to plain text on 400.
+    Plain text is more robust against URLs/underscores/special chars in scraped data.
+    """
     if not bot_token or not chat_id:
         print(f"⚠️  Telegram not configured; would have sent:\n{text[:200]}...")
         return False
+    url = TELEGRAM_API.format(token=bot_token)
+    base_payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+    # Try Markdown first (gives bold formatting)
     try:
-        url = TELEGRAM_API.format(token=bot_token)
-        resp = requests.post(url, json={
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": True,
-        }, timeout=15)
+        resp = requests.post(url, json={**base_payload, "parse_mode": "Markdown"}, timeout=15)
+        if resp.status_code == 200:
+            return True
+        # Markdown parse failed — log and fall back
+        print(f"⚠️  Telegram Markdown failed (status {resp.status_code}), retrying plain text",
+              file=sys.stderr)
+    except requests.RequestException as e:
+        print(f"⚠️  Telegram Markdown request error: {e}, retrying plain text", file=sys.stderr)
+
+    # Fall back to plain text (no parse_mode)
+    try:
+        resp = requests.post(url, json=base_payload, timeout=15)
         resp.raise_for_status()
         return True
     except requests.RequestException as e:
-        print(f"⚠️  Telegram send failed: {e}", file=sys.stderr)
+        print(f"❌ Telegram plain text also failed: {e}", file=sys.stderr)
         return False
 
 
