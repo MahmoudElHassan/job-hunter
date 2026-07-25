@@ -1,0 +1,35 @@
+board,query,location_filter,priority,enabled,freshness_days,notes
+linkedin,".NET Backend Developer remote",remote,1,true,2,Mainstream
+linkedin,"ASP.NET Core Developer remote sponsorship",remote,1,true,2,
+linkedin,"C# Backend Engineer Gulf visa",gulf,1,true,2,
+linkedin,"Full Stack .NET React remote",remote,2,true,3,
+linkedin,"Software Engineer .NET sponsorship UAE",uae,1,true,2,
+linkedin,"Senior Software Engineer .NET Europe visa",europe,2,true,3,
+linkedin,"Backend Developer Fintech .NET remote",remote,2,true,3,
+linkedin,"Clean Architecture .NET remote",remote,2,true,3,
+bayt,".NET Developer",gulf,1,true,3,
+bayt,"ASP.NET Core Saudi",ksa,1,true,3,
+bayt,"Backend Developer C# UAE",uae,1,true,3,
+gulftalent,".NET Developer",gulf,1,true,7,
+gulftalent,"Software Engineer .NET",gulf,2,true,7,
+indeed,"ASP.NET Core Developer remote sponsorship",remote,1,true,3,
+indeed,"C# Backend Developer UAE visa",uae,1,true,3,
+glassdoor,".NET Backend Gulf",gulf,2,true,3,
+remoteok,".NET backend",remote,1,true,2,
+remoteok,"C# full stack",remote,1,true,2,
+weworkremotely,"backend .NET",remote,2,true,3,
+arcdev,"backend .NET",remote,1,true,2,
+arcdev,"full stack .NET",remote,1,true,2,
+upwork,"ASP.NET Core freelancer",remote,1,true,1,Freelance
+upwork,"C# backend contract",remote,1,true,1,Freelance
+upwork,".NET web API hourly",remote,1,true,1,Freelance
+toptal,".NET developer apply",remote,1,true,7,Freelance elite
+mostaql,"ASP.NET",arabic,2,true,1,Arabic freelance
+mostaql,"backend C#",arabic,2,true,1,Arabic freelance
+contra,".NET developer freelance",remote,2,true,3,Freelance
+braintrust,".NET backend",remote,2,true,3,Freelance
+peopleperhour,"ASP.NET",remote,3,true,3,UK/EU freelance
+github,"algora .NET bounty",open-source,3,true,7,OSS bounty
+github,"gitcoin C# backend",open-source,3,true,7,OSS bounty
+news.ycombinator,"Who is hiring .NET remote",remote,1,true,7,HackerNews monthly
+news.ycombinator,"Ask HN freelance .NET",remote,2,true,14,HackerNews freelance
