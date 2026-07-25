@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Job Hunter — Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117;
+    --bg-card: #161b22;
+    --bg-row: #1c2128;
+    --bg-row-hover: #22272e;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --orange: #db6d28;
+    --red: #f85149;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  .subtitle { color: var(--text-dim); font-size: 14px; }
+
+  /* Stats */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+  }
+  .stat-label { color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 26px; font-weight: 600; margin-top: 4px; }
+  .stat-value.five { color: var(--orange); }
+  .stat-value.four { color: var(--green); }
+  .stat-value.three { color: var(--text-dim); }
+
+  /* Filters */
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; min-width: 120px; flex: 1; }
+  .filter-group label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; }
+  .filter-group input, .filter-group select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .filter-group input:focus, .filter-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  /* Table */
+  .table-wrap {
+    overflow-x: auto;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--bg-row);
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  th:hover { color: var(--accent); }
+  th.sort-asc::after { content: ' ↑'; }
+  th.sort-desc::after { content: ' ↓'; }
+  tbody tr { transition: background 0.1s; }
+  tbody tr:hover { background: var(--bg-row-hover); }
+  td.url-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.url-cell a { color: var(--accent); text-decoration: none; }
+  td.url-cell a:hover { text-decoration: underline; }
+  td.actions { white-space: nowrap; }
+  td.actions button {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-right: 4px;
+    font-family: inherit;
+  }
+  td.actions button:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  /* Score badge */
+  .score {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .score-5 { background: rgba(219, 109, 40, 0.2); color: var(--orange); border: 1px solid var(--orange); }
+  .score-4 { background: rgba(63, 185, 80, 0.2); color: var(--green); border: 1px solid var(--green); }
+  .score-3 { background: rgba(139, 148, 158, 0.2); color: var(--text-dim); border: 1px solid var(--border); }
+  .score-2 { background: rgba(248, 81, 73, 0.1); color: var(--red); border: 1px solid var(--red); }
+
+  /* Source tag */
+  .source-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* Status */
+  .status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+  .status-new { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+  .status-tailored { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+  .status-applied { background: rgba(210, 153, 34, 0.15); color: var(--yellow); }
+  .status-rejected { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+
+  .empty { padding: 40px; text-align: center; color: var(--text-dim); }
+
+  footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 12px; text-align: center; }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    body { padding: 12px; }
+    h1 { font-size: 22px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    th, td { padding: 8px 6px; font-size: 12px; }
+    .stat-value { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎯 Job Hunter Dashboard</h1>
+  <div class="subtitle">Live job findings · Auto-updated every 4 hours · Last updated: <span id="last-updated">—</span></div>
+</header>
+
+<section class="stats" id="stats">
+  <div class="stat"><div class="stat-label">Total</div><div class="stat-value" id="stat-total">—</div></div>
+  <div class="stat"><div class="stat-label">🔥 Score 5</div><div class="stat-value five" id="stat-5">—</div></div>
+  <div class="stat"><div class="stat-label">🟢 Score 4</div><div class="stat-value four" id="stat-4">—</div></div>
+  <div class="stat"><div class="stat-label">New today</div><div class="stat-value" id="stat-today">—</div></div>
+</section>
+
+<section class="filters">
+  <div class="filter-group">
+    <label>Search</label>
+    <input type="text" id="search" placeholder="company, role, stack...">
+  </div>
+  <div class="filter-group">
+    <label>Min score</label>
+    <select id="filter-score">
+      <option value="0">All</option>
+      <option value="3">3+</option>
+      <option value="4">4+ (strong)</option>
+      <option value="5" selected>5 only (top)</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Source</label>
+    <select id="filter-source">
+      <option value="">All</option>
+      <option value="main">Main jobs</option>
+      <option value="freelance">Freelance</option>
+      <option value="oss">OSS</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Status</label>
+    <select id="filter-status">
+      <option value="">All</option>
+      <option value="new">New</option>
+      <option value="tailored">Tailored</option>
+      <option value="applied">Applied</option>
+    </select>
+  </div>
+</section>
+
+<div class="table-wrap">
+  <table id="jobs">
+    <thead>
+      <tr>
+        <th data-sort="score">Score</th>
+        <th data-sort="company">Company</th>
+        <th data-sort="role">Role</th>
+        <th data-sort="location">Location</th>
+        <th data-sort="source_type">Source</th>
+        <th>Stack</th>
+        <th>URL</th>
+        <th data-sort="date_found">Date</th>
+        <th data-sort="status">Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="rows">
+      <tr><td colspan="10" class="empty">Loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<footer>
+  <p>Built by Job Hunter · <a href="https://github.com/MahmoudElHassan/job-hunter">View on GitHub</a> · <a href="https://t.me/Job_hunter_minimax_bot">Telegram bot</a></p>
+  <p>Next scan: 08:00 / 12:00 / 16:00 / 20:00 Makkah (Sun–Thu)</p>
+</footer>
+
+<script>
+const CSV_URL = 'https://raw.githubusercontent.com/MahmoudElHassan/job-hunter/main/data/Job_Listings.csv';
+let allRows = [];
+let sortKey = 'score';
+let sortDir = 'desc';
+
+async function loadData() {
+  try {
+    const resp = await fetch(CSV_URL, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    allRows = parseCSV(text);
+    document.getElementById('last-updated').textContent = new Date().toLocaleString();
+    render();
+    updateStats();
+  } catch (e) {
+    document.getElementById('rows').innerHTML =
+      `<tr><td colspan="10" class="empty">⚠️ Failed to load: ${e.message}<br><br>Check the <a href="${CSV_URL}" style="color: var(--accent)">raw CSV</a> or wait for the next scan.</td></tr>`;
+  }
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = parseCSVLine(lines[0]);
+  return lines.slice(1).map(line => {
+    const values = parseCSVLine(line);
+    const row = {};
+    headers.forEach((h, i) => row[h] = (values[i] || '').trim());
+    return row;
+  }).filter(r => r.id);  // skip empty
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"' && line[i+1] === '"' && inQuotes) {
+      current += '"'; i++;
+    } else if (c === '"') {
+      inQuotes = !inQuotes;
+    } else if (c === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += c;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function updateStats() {
+  document.getElementById('stat-total').textContent = allRows.length;
+  document.getElementById('stat-5').textContent = allRows.filter(r => r.score === '5').length;
+  document.getElementById('stat-4').textContent = allRows.filter(r => r.score === '4').length;
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('stat-today').textContent =
+    allRows.filter(r => r.date_found && r.date_found.startsWith(today)).length;
+}
+
+function render() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const minScore = parseInt(document.getElementById('filter-score').value);
+  const source = document.getElementById('filter-source').value;
+  const status = document.getElementById('filter-status').value;
+
+  let rows = allRows.filter(r => {
+    if (parseInt(r.score || 0) < minScore) return false;
+    if (source && r.source_type !== source) return false;
+    if (status && (r.status || 'new') !== status) return false;
+    if (search) {
+      const haystack = `${r.company} ${r.role} ${r.stack_match} ${r.location}`.toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    const av = a[sortKey] || '';
+    const bv = b[sortKey] || '';
+    if (sortKey === 'score') {
+      return sortDir === 'desc' ? parseInt(bv) - parseInt(av) : parseInt(av) - parseInt(bv);
+    }
+    return sortDir === 'desc' ? bv.localeCompare(av) : av.localeCompare(bv);
+  });
+
+  const html = rows.length === 0
+    ? '<tr><td colspan="10" class="empty">No jobs match your filters.</td></tr>'
+    : rows.map(r => rowHTML(r)).join('');
+  document.getElementById('rows').innerHTML = html;
+}
+
+function rowHTML(r) {
+  const scoreClass = `score-${r.score}`;
+  const statusClass = `status-${r.status || 'new'}`;
+  const stack = (r.stack_match || '').split(',').slice(0, 3).map(s => s.trim()).filter(Boolean).join(' · ');
+  const link = r.url ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">open ↗</a>` : '—';
+  const date = r.date_found ? r.date_found.slice(0, 10) : '—';
+  const loc = r.remote === 'yes' ? `${r.location || '—'} 🏠` : (r.location || '—');
+  return `
+    <tr>
+      <td><span class="score ${scoreClass}">${r.score || '—'}★</span></td>
+      <td><strong>${escapeHtml(r.company || 'Unknown')}</strong></td>
+      <td>${escapeHtml(r.role || '—')}</td>
+      <td>${escapeHtml(loc)}</td>
+      <td><span class="source-tag">${escapeHtml(r.source_type || '—')}</span></td>
+      <td style="font-size: 11px; color: var(--text-dim);">${escapeHtml(stack)}</td>
+      <td class="url-cell">${link}</td>
+      <td style="font-size: 11px; color: var(--text-dim);">${date}</td>
+      <td><span class="status ${statusClass}">${r.status || 'new'}</span></td>
+      <td class="actions">
+        <button onclick="copyId('${escapeHtml(r.id)}')" title="Copy ID for Mavis chat">📋 ID</button>
+      </td>
+    </tr>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+async function copyId(id) {
+  try {
+    await navigator.clipboard.writeText(id);
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✅ Copied';
+    setTimeout(() => btn.textContent = orig, 1500);
+  } catch (e) {
+    alert('ID: ' + id + '\n\nClipboard blocked. Copy manually.');
+  }
+}
+
+// Event listeners
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('filter-score').addEventListener('change', render);
+document.getElementById('filter-source').addEventListener('change', render);
+document.getElementById('filter-status').addEventListener('change', render);
+
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if (sortKey === key) {
+      sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      sortKey = key;
+      sortDir = 'desc';
+    }
+    document.querySelectorAll('th').forEach(t => t.classList.remove('sort-asc', 'sort-desc'));
+    th.classList.add(sortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+    render();
+  });
+});
+
+// Initial sort indicator
+document.querySelector('th[data-sort="score"]').classList.add('sort-desc');
+
+loadData();
+// Auto-refresh every 5 min
+setInterval(loadData, 5 * 60 * 1000);
+</script>
+
+</body>
+</html>
