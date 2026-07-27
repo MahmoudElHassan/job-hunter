@@ -279,7 +279,9 @@ function render() {
   const minScore = parseInt(document.getElementById('filter-score').value);
   const source = document.getElementById('filter-source').value;
   const status = document.getElementById('filter-status').value;
-  const hideUnknown = document.getElementById('filter-company').value === 'no';
+  // filter-company: 'all' (default, show all) or 'no' (hide Unknown companies)
+  const companyFilter = document.getElementById('filter-company').value;
+  const hideUnknown = companyFilter === 'no';
 
   let rows = ALL_JOBS.filter(r => {
     if (parseInt(r.score || 0) < minScore) return false;
