@@ -280,14 +280,43 @@ async function loadData() {
 }
 
 function parseCSV(text) {
-  const lines = text.trim().split('\n');
-  const headers = parseCSVLine(lines[0]);
-  return lines.slice(1).map(line => {
-    const values = parseCSVLine(line);
-    const row = {};
-    headers.forEach((h, i) => row[h] = (values[i] || '').trim());
-    return row;
-  }).filter(r => r.id);  // skip empty
+  // State machine that respects quoted fields with embedded commas and
+  // newlines. The previous version did `text.split('\n')` which broke any
+  // row whose `notes` field contained a newline (causing it to be counted
+  // twice in the dashboard).
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' && inQuotes && text[i + 1] === '"') {
+      field += '"'; i++;
+    } else if (c === '"') {
+      inQuotes = !inQuotes;
+    } else if (c === ',' && !inQuotes) {
+      row.push(field); field = '';
+    } else if ((c === '\n' || c === '\r') && !inQuotes) {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.length > 1 || (row[0] && row[0].trim())) rows.push(row);
+      row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length > 0) {
+    row.push(field);
+    if (row.length > 1 || (row[0] && row[0].trim())) rows.push(row);
+  }
+
+  if (rows.length === 0) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1).map(values => {
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (values[i] || '').trim());
+    return obj;
+  }).filter(r => r.id);  // skip blank rows
 }
 
 function parseCSVLine(line) {
