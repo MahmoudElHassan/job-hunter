@@ -22,10 +22,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
 DATA = ROOT / "data"
 LISTINGS_CSV = DATA / "Job_Listings.csv"
 APPS_DIR = DATA / "Applications"
 APPS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Single source of truth for the Job_Listings.csv column layout.
+# Imported from job_hunter so the writers and readers can't drift.
+from job_hunter import LISTING_FIELDS  # noqa: E402
 
 
 def now_iso() -> str:
@@ -420,9 +425,15 @@ def main():
                 rows.append(row)
         if updated and rows:
             with LISTINGS_CSV.open("w", encoding="utf-8", newline="") as f:
-                w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                w = csv.DictWriter(
+                    f,
+                    fieldnames=LISTING_FIELDS,
+                    extrasaction="ignore",
+                )
                 w.writeheader()
-                w.writerows(rows)
+                for r in rows:
+                    safe = {k: r.get(k, "") for k in LISTING_FIELDS}
+                    w.writerow(safe)
             print(f"📝 Status updated to 'tailored' in Job_Listings.csv")
 
     print()

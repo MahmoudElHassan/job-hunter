@@ -34,10 +34,15 @@ import requests
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
 DATA = ROOT / "data"
 APPS_DIR = DATA / "Applications"
 LISTINGS_CSV = DATA / "Job_Listings.csv"
 APPS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Single source of truth for the Job_Listings.csv column layout.
+# Imported from job_hunter so the writers and readers can't drift.
+from job_hunter import LISTING_FIELDS  # noqa: E402
 
 HUNTER_URL = "https://api.hunter.io/v2/domain-search"
 TAVILY_URL = "https://api.tavily.com/search"
@@ -235,9 +240,17 @@ def update_job_listings(company: str, contacts: dict) -> bool:
 
     if updated:
         with LISTINGS_CSV.open("w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer = csv.DictWriter(
+                f,
+                fieldnames=LISTING_FIELDS,
+                extrasaction="ignore",
+            )
             writer.writeheader()
-            writer.writerows(rows)
+            for r in rows:
+                # Normalise every row to all 20 keys so the file stays
+                # in sync with job_hunter.LISTING_FIELDS.
+                safe = {k: r.get(k, "") for k in LISTING_FIELDS}
+                writer.writerow(safe)
     return updated
 
 

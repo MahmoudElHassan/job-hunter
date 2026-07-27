@@ -41,6 +41,23 @@ DAILY_DIR.mkdir(parents=True, exist_ok=True)
 APPS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------- Constants ----------
+# Single source of truth for the Job_Listings.csv column layout.
+# Every reader + writer (job_hunter.append_listing, run_scan, scripts/find_contacts.py,
+# scripts/generate_application.py) MUST go through this list. If a script writes
+# to Job_Listings.csv without using these fields, the next scanner run will shift
+# columns again. Run scripts/repair_listings_csv.py if the header ever drifts.
+LISTING_FIELDS = [
+    "id", "date_found", "score", "source_type", "company", "role",
+    "location", "remote", "sponsorship", "stack_match", "board",
+    "url", "salary_range",
+    "recruiter_name", "recruiter_email",
+    "hiring_manager", "hiring_manager_email",
+    "contact_email", "status", "notes",
+]
+
+# Status values that may appear in `status` (used by repair + guard + filter).
+KNOWN_STATUSES = {"new", "tailored", "applied", "rejected"}
+
 TAVILY_URL = "https://api.tavily.com/search"
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 MAX_RESULTS_PER_QUERY = 8
@@ -153,6 +170,157 @@ def tavily_search(query: str, api_key: str, max_results: int = MAX_RESULTS_PER_Q
         return []
 
 
+def is_likely_job(title: str, url: str, content: str) -> bool:
+    """Return True if the result looks like a single, real job posting.
+
+    Used as the first gate in run_scan (before scoring / dedupe / saving) so we
+    never pollute the CSV with Reddit threads, Workday blogs, NaukriGulf index
+    pages, MSDN magazine articles, etc.
+
+    Rules are kept in this single place. Be conservative: when in doubt, allow
+    (return True) and let score_result's <=2 gate do the rest. False-positives
+    are recoverable; false-negatives (real jobs skipped) are not.
+    """
+    title_l = (title or "").lower()
+    url_l = (url or "").lower()
+
+    # ---- Allow list (high confidence ATS job pages) — checked first so a
+    # ---- messy title on a known-good URL still passes.
+    allow_hosts = (
+        "linkedin.com/jobs/view/",
+        "job-boards.greenhouse.io/",
+        "boards.greenhouse.io/",
+        "jobs.lever.co/",
+        "jobs.ashbyhq.com/",
+        "myworkdayjobs.com/",  # all *.myworkdayjobs.com host variants
+        "bayt.com/en/job/",
+        "gulftalent.com/job/",
+        "wellfound.com/jobs/",
+        "upwork.com/jobs/",
+        "toptal.com/freelance-jobs/",
+    )
+    if any(h in url_l for h in allow_hosts):
+        return True
+    # Workday ATS specifically requires /job/ in the path (e.g. myworkdayjobs.com/en-US/job/...)
+    if "myworkdayjobs.com" in url_l and "/job/" in url_l:
+        return True
+
+    # ---- Deny list: URL hosts / paths (high confidence) ----
+    deny_hosts = (
+        "reddit.com",
+        "learn.microsoft.com",
+        "devblogs.microsoft.com",
+        "msdn.microsoft.com",
+        "stackoverflow.blog",
+        "hackernoon.com",
+        "medium.com",  # articles
+    )
+    if any(h in url_l for h in deny_hosts):
+        return False
+    # blog.workday.com (and generally /blog/ on non-ATS hosts)
+    if "workday.com" in url_l and "/blog" in url_l:
+        return False
+    if "/blog/" in url_l and not any(ats in url_l for ats in allow_hosts):
+        return False
+    # Pure discussion: title contains ": r/" (Reddit style)
+    if ": r/" in title_l:
+        return False
+
+    # ---- Deny list: title patterns (case-insensitive) ----
+    # Question-shaped: "Does X", "Should I Y", "What does Z", "Almost afraid ..."
+    question_starts = (
+        "does ", "should i ", "what does ", "almost afraid",
+        "how to ", "is it worth ",
+    )
+    if title_l.startswith(question_starts):
+        return False
+    # Magazine / article style
+    magazine_markers = (
+        "msdn magazine", "devtalk", "community leadership",
+        "magazine:", "by ", "interview with",
+    )
+    if any(m in title_l for m in magazine_markers):
+        return False
+    # Aggregate listing pages (e.g. "1000+ Asp.net Core Remote jobs",
+    # NaukriGulf-style "Net Developer Jobs in UAE")
+    if title_l.startswith("browse "):
+        return False
+    if re.search(r"\b1000\+ .* jobs\b", title_l):
+        return False
+    if re.search(r"jobs in (uae|saudi|gulf|egypt|europe|asia|qatar|kuwait|bahrain|oman)\b", title_l):
+        return False
+    # URL says "jobs?" search page (Indeed / generic aggregators)
+    if re.search(r"/jobs\?", url_l):
+        return False
+    # URL ends with -jobs (e.g. ziprecruiter.com/Jobs/Remote-Backend-Net-Developer)
+    if re.search(r"-jobs/?$", url_l):
+        return False
+    # Aggregator search-result URLs (Jooble, Indeed, SimplyHired, Glassdoor,
+    # ZipRecruiter, NaukriGulf, etc.) — they look like job pages but are
+    # actually a search-results index for "X role" with N matches.
+    aggregator_url_patterns = (
+        r"jooble\.org/jobs[-/]",          # ca.jooble.org/jobs-net-developer-...
+        r"indeed\.com/q-[a-z0-9%+\-]+-jobs",  # indeed.com/q-...-jobs.html
+        r"indeed\.com/jobs\?",             # alternate Indeed search
+        r"simplyhired\.com/search\?q=",    # simplyhired.com/search?q=...
+        r"glassdoor\.com/Job/.+-jobs-SRCH_",  # glassdoor search results
+        r"glassdoor\.com/Job/.+-jobs-(?:SRCH|IL)",
+        r"ziprecruiter\.com/Jobs-[A-Za-z]",  # ziprecruiter search-by-keyword
+        r"linkedin\.com/jobs/search",       # linkedin search results
+        r"linkedin\.com/jobs/.+-jobs\?",    # linkedin search with query
+        r"linkedin\.com/jobs/(?:[a-z\-]+-)?jobs\?",
+        r"randstadusa\.com/jobs/q-",        # randstad staffing search
+        r"arc\.dev/remote-jobs/[a-z\-]+/?$",  # arc.dev category landing page
+        r"toptal\.com/freelance-jobs/(?:[a-z\-]+/)?[a-z\-]+/?$",  # toptal category
+    )
+    if any(re.search(p, url_l) for p in aggregator_url_patterns):
+        return False
+    # Salary / overview pages (glassdoor, levels.fyi) — not jobs
+    if re.search(r"/(Salaries|salary|compensation|overview)/?", url_l):
+        return False
+    if "salary-SRCH" in url_l or "compensation" in url_l:
+        return False
+    # URL contains URL-encoded space (+) — almost always a search query
+    if "+" in url_l and any(kw in url_l for kw in ("jobs", "developer", "engineer", "net")):
+        return False
+
+    # ---- Title patterns: numeric / aggregate markers ----
+    # Title is mostly a number: "937 Net developer ...", "$46", "1000+ ... jobs"
+    if re.match(r"^\s*(\$?\d[\d,]*\s*$|\d[\d,]*\s)", title_l):
+        # "937 jobs" / "$46" / "1000+ ..." → aggregate listing
+        return False
+    # Title contains " jobs" near the end as a noun (aggregate), not "X is hiring"
+    if re.search(r"\b\d*\s*jobs?\b\s*(in\s+\w+)?\s*\.?$", title_l):
+        return False
+    # Title ends with " jobs" (without "hiring"/"available"/"open" after)
+    if re.search(r"\bjobs?\s*\.?$", title_l):
+        return False
+    # "Browse" prefix (NaukriGulf / ZipRecruiter aggregator)
+    if title_l.startswith("browse "):
+        return False
+    if re.search(r"\b1000\+ .* jobs\b", title_l):
+        return False
+    if re.search(r"jobs in (uae|saudi|gulf|egypt|europe|asia|qatar|kuwait|bahrain|oman|dubai|abu dhabi|riyadh|jeddah|makkah|new york|london)\b", title_l):
+        return False
+    # Category/archive page: title contains "[Month Year]" or "(Month Year)"
+    if re.search(r"[\[\(]\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}\s*[\]\)]", title_l):
+        return False
+    # Salary / pay trend article titles
+    if re.search(r"\baverage salary\b", title_l) or re.search(r"\bpay trends?\b", title_l):
+        return False
+    # Generic role + "Jobs" as title (e.g. "Net Developer jobs in New York, NY")
+    if re.match(r"^[a-z][\w\s\.#\+]+ jobs?( in [\w\s,]+)?[\.,]?$", title_l):
+        # If the title is just "X jobs" (no specific company/role detail),
+        # treat as aggregator. Real jobs usually have a specific company name.
+        return False
+    # Title is just a number (ZipRecruiter "salary snippet" preview)
+    if re.match(r"^\s*\$?\d+(?:k|,000)?\s*$", title_l):
+        return False
+
+    # Default: let it through to score_result
+    return True
+
+
 def score_result(title: str, url: str, content: str) -> tuple[int, str]:
     """
     Score a search result 1-5 based on Mahmoud's profile.
@@ -259,17 +427,41 @@ def extract_company_role(title: str, url: str) -> tuple[str, str]:
 
 
 def append_listing(row: dict[str, str]) -> None:
-    """Append one row to Job_Listings.csv (creates with header if needed)."""
+    """Append one row to Job_Listings.csv (creates with header if needed).
+
+    Hardened against schema drift:
+    * Always writes the full LISTING_FIELDS header (never the old 16-col shape).
+    * Normalises the row dict to LISTING_FIELDS keys (default "" for missing).
+    * Refuses to append if the existing header on disk doesn't match
+      LISTING_FIELDS (so we never silently shift columns again).
+    """
     is_new = not LISTINGS_CSV.exists() or LISTINGS_CSV.stat().st_size == 0
+
+    if not is_new:
+        with LISTINGS_CSV.open(encoding="utf-8", newline="") as f:
+            reader = csv.reader(f)
+            existing_header = next(reader, None)
+        if existing_header != LISTING_FIELDS:
+            sys.exit(
+                "❌ Job_Listings.csv header does not match LISTING_FIELDS.\n"
+                f"   on disk: {existing_header}\n"
+                f"   expected: {LISTING_FIELDS}\n"
+                "   Run `python3 scripts/repair_listings_csv.py` to repair."
+            )
+
+    # Normalise: any extra keys are dropped, missing keys become "".
+    safe_row = {k: ("" if row.get(k) is None else str(row.get(k, "")))
+                for k in LISTING_FIELDS}
+
     with LISTINGS_CSV.open("a", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            "id", "date_found", "score", "source_type", "company", "role",
-            "location", "remote", "sponsorship", "stack_match", "board",
-            "url", "salary_range", "contact_email", "status", "notes",
-        ])
+        writer = csv.DictWriter(
+            f,
+            fieldnames=LISTING_FIELDS,
+            extrasaction="ignore",
+        )
         if is_new:
             writer.writeheader()
-        writer.writerow(row)
+        writer.writerow(safe_row)
 
 
 def send_telegram(text: str, bot_token: str, chat_id: str) -> bool:
@@ -358,6 +550,13 @@ def run_scan(
             if not url or not title:
                 continue
 
+            # Phase 2: drop non-job results (Reddit / blog / index pages) before
+            # anything else. Log every skip so the rule list can be tuned from
+            # Actions logs.
+            if not is_likely_job(title, url, content):
+                print(f"   skipped noise: {url}")
+                continue
+
             # Dedup
             url_key = f"url:{url.lower()}"
             company_guess, role_guess = extract_company_role(title, url)
@@ -402,6 +601,11 @@ def run_scan(
                 "board": board,
                 "url": url,
                 "salary_range": "N/A",
+                # 4 contact fields: empty by default; find_contacts.py fills them later.
+                "recruiter_name": "",
+                "recruiter_email": "",
+                "hiring_manager": "",
+                "hiring_manager_email": "",
                 "contact_email": "",
                 "status": "new",
                 "notes": (content[:200] + "...") if len(content) > 200 else content,
