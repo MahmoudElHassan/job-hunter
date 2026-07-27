@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Job Hunter — Cover Letter System</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #f5f5f7;
+    color: #1d1d1f;
+    margin: 0; padding: 24px; line-height: 1.5;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  header {
+    background: linear-gradient(135deg, #1d1d1f 0%, #2c2c2e 100%);
+    color: #fff; padding: 28px; border-radius: 16px;
+    margin-bottom: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+  header h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; }
+  header p { margin: 0; opacity: 0.85; font-size: 14px; }
+  .data-source {
+    margin-top: 14px; padding: 10px 14px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px; font-size: 12px; color: rgba(255,255,255,0.7);
+  }
+  .data-source a { color: #58a6ff; text-decoration: none; }
+  .data-source .badge { background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 4px; margin-left: 6px; }
+  .stats { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+  .stat { background: rgba(255,255,255,0.1); padding: 8px 14px; border-radius: 8px; font-size: 12px; }
+  .stat strong { font-size: 16px; display: block; }
+
+  .queue-bar {
+    background: #fff; border: 1px solid #e5e5ea; border-radius: 12px;
+    padding: 14px 18px; margin-bottom: 18px;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+  }
+  .queue-info { font-size: 14px; }
+  .queue-info strong { color: #007aff; font-size: 16px; }
+  .queue-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .status-banner {
+    padding: 12px 16px; border-radius: 10px; margin-bottom: 14px;
+    font-size: 13px; display: flex; align-items: center; gap: 10px;
+  }
+  .status-banner.loading { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+  .status-banner.success { background: #d4edda; color: #155724; border: 1px solid #34c759; }
+  .status-banner.warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+  .status-banner.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+
+  .vacancy {
+    background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid #e5e5ea; border-left: 4px solid transparent;
+    transition: box-shadow 0.2s;
+  }
+  .vacancy:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.07); }
+  .vacancy.status-pending { border-left-color: #d2d2d7; }
+  .vacancy.status-approved { border-left-color: #34c759; }
+  .vacancy.status-generated { border-left-color: #007aff; }
+
+  .vac-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+  .vac-info { flex: 1; min-width: 240px; }
+  .vac-info h2 { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
+  .vac-info .role { color: #1d1d1f; font-weight: 500; margin-bottom: 6px; font-size: 14px; }
+  .vac-info .meta { color: #6e6e73; font-size: 12px; display: flex; gap: 5px; flex-wrap: wrap; }
+  .badge { display: inline-block; background: #f5f5f7; color: #6e6e73; padding: 2px 7px; border-radius: 5px; font-size: 11px; }
+  .badge.remote { background: #d1ecf1; color: #0c5460; }
+  .badge.score5 { background: #fce4cf; color: #c2410c; font-weight: 600; }
+  .badge.score4 { background: #d4edda; color: #155724; font-weight: 600; }
+  .badge.score3 { background: #f0f0f0; color: #555; }
+  .badge.status-new { background: #e0e0e0; color: #555; }
+  .badge.status-approved { background: #d4edda; color: #155724; font-weight: 600; }
+  .badge.status-generated { background: #cfe2ff; color: #084298; font-weight: 600; }
+
+  .controls { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .type-select, .filter-select {
+    padding: 6px 10px; border-radius: 7px; border: 1px solid #d2d2d7;
+    font-size: 13px; background: #fff; font-family: inherit;
+  }
+  button {
+    padding: 7px 14px; border-radius: 7px; border: none;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: background 0.15s, transform 0.1s; font-family: inherit;
+  }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #007aff; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #0062cc; }
+  .btn-success { background: #34c759; color: #fff; }
+  .btn-success:hover:not(:disabled) { background: #2ba846; }
+  .btn-secondary { background: #f5f5f7; color: #1d1d1f; }
+  .btn-secondary:hover:not(:disabled) { background: #e5e5ea; }
+  .btn-warning { background: #ff9500; color: #fff; }
+
+  .key-fits { margin-top: 10px; }
+  .key-fits .stack { font-size: 12px; color: #6e6e73; margin-top: 4px; }
+
+  .cover-letter {
+    margin-top: 16px; background: #fafafa; border: 1px solid #e5e5ea;
+    border-radius: 10px; padding: 16px; display: none;
+  }
+  .cover-letter.show { display: block; }
+  .cover-letter textarea {
+    width: 100%; min-height: 380px; border: 1px solid #d2d2d7;
+    border-radius: 8px; padding: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; line-height: 1.6; background: #fff; resize: vertical;
+  }
+  .cover-letter .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: #1d1d1f; color: #fff;
+    padding: 12px 18px; border-radius: 10px; font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none; z-index: 1000; max-width: 320px;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: #c0392b; }
+  .toast.success { background: #27ae60; }
+
+  .manual-copy {
+    margin-top: 10px; padding: 10px;
+    background: #fff8e1; border: 1px solid #ffd54f; border-radius: 8px;
+    font-size: 12px; color: #5d4037;
+  }
+  .manual-copy textarea {
+    width: 100%; margin-top: 6px; padding: 8px;
+    font-family: ui-monospace, monospace; font-size: 12px;
+    border: 1px solid #e0c080; border-radius: 4px; background: #fff;
+  }
+
+  .filters {
+    background: #fff; border: 1px solid #e5e5ea; border-radius: 12px;
+    padding: 14px; margin-bottom: 16px;
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: end;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; min-width: 120px; flex: 1; }
+  .filter-group label { font-size: 11px; color: #6e6e73; text-transform: uppercase; font-weight: 600; }
+  .filter-group input, .filter-group select {
+    padding: 7px 10px; border-radius: 6px; border: 1px solid #d2d2d7;
+    font-size: 13px; font-family: inherit; background: #fff;
+  }
+
+  .empty { padding: 40px; text-align: center; color: #6e6e73; }
+  .empty button { margin-top: 12px; }
+
+  footer { margin-top: 40px; padding: 20px; text-align: center; color: #6e6e73; font-size: 12px; }
+  footer code { background: #e5e5ea; padding: 1px 5px; border-radius: 3px; }
+
+  @media (max-width: 600px) {
+    body { padding: 12px; }
+    .vac-head { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>🎯 Job Hunter — Cover Letter System</h1>
+  <p>Pick a vacancy → pick an engagement type → generate a tailored cover letter. Copy, save as PDF, or save as DOCX.</p>
+  <div class="data-source">
+    📂 Data source: <code style="background:rgba(255,255,255,0.15);padding:1px 6px;border-radius:3px;">Job_Listings.csv</code> (auto-loaded from your <code style="background:rgba(255,255,255,0.15);padding:1px 6px;border-radius:3px;">job-hunter</code> GitHub repo)
+    <span class="badge" id="source-status">⏳ Loading…</span>
+    <button class="btn-secondary" style="margin-left:10px; padding: 3px 8px; font-size: 11px; background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3);" onclick="loadData(true)">🔄 Refresh</button>
+  </div>
+  <div class="stats">
+    <div class="stat"><strong id="stat-total">—</strong>total jobs</div>
+    <div class="stat"><strong id="stat-5">—</strong>score 5 (top)</div>
+    <div class="stat"><strong id="stat-4">—</strong>score 4 (strong)</div>
+    <div class="stat"><strong id="stat-approved">—</strong>approved</div>
+    <div class="stat"><strong id="stat-generated">—</strong>letters generated</div>
+  </div>
+</header>
+
+<div class="queue-bar">
+  <div class="queue-info">
+    <strong id="queue-count">0</strong> vacancies approved & ready to send to Job Hunter
+  </div>
+  <div class="queue-actions">
+    <button class="btn-primary" onclick="sendApprovalsToJobHunter()">📨 Send All Approvals</button>
+    <button class="btn-secondary" onclick="copyApprovals()">📋 Copy Approvals</button>
+    <button class="btn-secondary" onclick="clearAll()">🗑 Clear All</button>
+  </div>
+</div>
+
+<div id="status-area"></div>
+
+<div class="filters">
+  <div class="filter-group">
+    <label>Search</label>
+    <input type="text" id="search" placeholder="company, role, stack...">
+  </div>
+  <div class="filter-group">
+    <label>Min score</label>
+    <select id="filter-score">
+      <option value="0">All</option>
+      <option value="3" selected>3+</option>
+      <option value="4">4+ (strong)</option>
+      <option value="5">5 only (top)</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Source</label>
+    <select id="filter-source">
+      <option value="">All</option>
+      <option value="main">Main</option>
+      <option value="freelance">Freelance</option>
+      <option value="oss">OSS</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Status</label>
+    <select id="filter-status">
+      <option value="">All</option>
+      <option value="new">New only</option>
+      <option value="approved">Approved</option>
+      <option value="generated">Generated</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Hide Unknown companies</label>
+    <select id="filter-company">
+      <option value="no" selected>Yes (cleaner)</option>
+      <option value="yes">No (show all)</option>
+    </select>
+  </div>
+</div>
+
+<div id="vacancies"></div>
+
+<footer>
+  Cover Letter System v3.0 · Self-contained HTML · localStorage-persisted approvals & generated letters.<br>
+  Falls back to embedded strong-jobs dataset if the CSV can't be reached.
+</footer>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- External script to avoid deployment injection breaking inline scripts -->
+<script src="app.js"></script>
+
+</body>
+</html>
