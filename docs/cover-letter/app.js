@@ -779,5 +779,24 @@ function generateCoverLetterHTML(v, type) {
   document.getElementById(id).addEventListener('change', render);
 });
 
-// Init
-loadData();
+// ===== Init =====
+// 1. Render the embedded fallback dataset immediately so the page is never
+//    empty while the CSV fetch is in flight.
+// 2. Then loadData() in the background to upgrade to the live CSV.
+function init() {
+  ALL_JOBS = FALLBACK_JOBS;
+  DATA_SOURCE = 'fallback';
+  document.getElementById('source-status').textContent = `⏳ Loading CSV…`;
+  setStatus(`⏳ Loading jobs from CSV…`, 'loading');
+  // First render so the user sees data (from fallback) right away.
+  render();
+  updateStats();
+  // Then load CSV in the background and re-render on success.
+  loadData();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
