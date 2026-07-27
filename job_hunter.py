@@ -260,7 +260,7 @@ def is_likely_job(title: str, url: str, content: str) -> bool:
     # actually a search-results index for "X role" with N matches.
     aggregator_url_patterns = (
         r"jooble\.org/jobs[-/]",          # ca.jooble.org/jobs-net-developer-...
-        r"indeed\.com/q-[a-z0-9%+\-]+-jobs",  # indeed.com/q-...-jobs.html
+        r"indeed\.com/q-[a-z0-9%+\-,\.]+-jobs",  # indeed.com/q-...-jobs.html (allow commas in city)
         r"indeed\.com/jobs\?",             # alternate Indeed search
         r"simplyhired\.com/search\?q=",    # simplyhired.com/search?q=...
         r"glassdoor\.com/Job/.+-jobs-SRCH_",  # glassdoor search results
@@ -274,6 +274,71 @@ def is_likely_job(title: str, url: str, content: str) -> bool:
         r"toptal\.com/freelance-jobs/(?:[a-z\-]+/)?[a-z\-]+/?$",  # toptal category
     )
     if any(re.search(p, url_l) for p in aggregator_url_patterns):
+        return False
+    # Non-job URL patterns (course platforms, talent pages, employer templates)
+    non_job_url_patterns = (
+        r"udemy\.com/course/",              # online course, not a job
+        r"coursera\.org/(?:course|learn)/",  # online course
+        r"pluralsight\.com/courses/",       # online course
+        r"youtube\.com/watch",              # video tutorial / discussion
+        r"youtu\.be/",                      # short video link
+        r"fullstack\.com/talent/(?:capabilities|candidates)",  # staffing marketing page
+        r"glassdoor\.com/employers/",       # JD template / employer marketing, not a posting
+        r"glassdoor\.com/blog/",
+        r"dev\.to/",                        # dev community blog posts
+        r"\.udemy\.com",
+        r"\.coursera\.org",
+        r"medium\.com/",                    # articles
+        r"hackernoon\.com",                 # articles
+        r"freelancer\.com",                 # platform (rarely individual jobs)
+        r"facebook\.com/groups/",           # facebook groups, not jobs
+        r"stackoverflow\.com/questions",    # Q&A
+        r"bitcoin\.stackexchange\.com",     # Q&A
+        r"softwareengineering\.stackexchange\.com",
+        r"codidact\.com/posts",             # Q&A
+        r"theeuropeanengineer\.com",        # blog
+        r"github\.com/[^/]+/[^/]+/?$",      # bare GitHub repo (not a job)
+        r"github\.com/[^/]+/[^/]+/issues",  # GitHub issues (could be bounties, but likely noise)
+        r"codeburst\.io",
+        r"towardsdatascience\.com",
+        r"\.dev\.to/",
+        # Staffing / talent aggregators that look like jobs
+        r"terminal\.io/hire-developers",     # "Hire C# Developers" marketing page
+        r"efinancialcareers\.com",          # "Senior C# Developer jobs in UAE" search index
+        r"jobleads\.com/",                  # aggregator
+        r"jobmetasearch\.ai/visa-sponsorship",  # visa search results
+        r"smarterasp\.net",                 # web hosting company
+        r"developers\.net/?$",              # "Hire Top Nearshore" marketing
+        r"bebee\.com/[^/]+/jobs/",          # bebee aggregator job index
+        # Allowlisted: GitHub repo, Open source
+    )
+    if any(re.search(p, url_l) for p in non_job_url_patterns):
+        return False
+    # Title patterns: tutorial / blog / video / hosting
+    tutorial_title_patterns = (
+        r"\btutorial\b",
+        r"\bbeginners?\b.*\bfor\b",         # "ASP.NET 9 MVC Tutorial for Beginners"
+        r"\bcrud\b",                         # "CRUD REST API in 1 Hour"
+        r"\bin \d+ hours?\b",                # "in 1 Hour"
+        r"\bin \d+ minutes?\b",
+        r"\bbetter than\b",                  # "Is C# Better than Go"
+        r"\bvs\.?\b",                        # "X vs Y"
+        r"\.net \d+",                        # "ASP.NET 9 MVC" — version-specific tutorial
+        r"\bweb hosting\b",
+        r"\bhosting\b",
+        r"\bdev community\b",
+        r"\bcontribute to open source\b",
+        r"\brelocating to\b",
+        r"\baverage salary\b",
+        r"\bpay trends?\b",
+        r"\bgithub\s+repo\b",
+        r"\bgetting started\b",
+        r"\bmeasure\b.*\bweb api\b",
+    )
+    if any(re.search(p, title_l) for p in tutorial_title_patterns):
+        return False
+    # Title is bare GitHub repo name (e.g. "MetacoSA/NBitcoin: Comprehensive ...")
+    if re.match(r"^[a-z0-9_-]+/[a-z0-9_-]+:", title_l):
         return False
     # Salary / overview pages (glassdoor, levels.fyi) — not jobs
     if re.search(r"/(Salaries|salary|compensation|overview)/?", url_l):
