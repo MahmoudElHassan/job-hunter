@@ -119,7 +119,11 @@ let GENERATED = JSON.parse(localStorage.getItem('cl_generated') || '{}');
 // ===== Data loading (CSV first, fallback if fails or empty) =====
 async function loadData(forceReload = false) {
   setStatus('⏳ Loading jobs from CSV…', 'loading');
-  document.getElementById('source-status').textContent = '⏳ Loading…';
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  setEl('source-status', '⏳ Loading…');
 
   let csvJobs = [];
   let csvError = null;
@@ -137,17 +141,17 @@ async function loadData(forceReload = false) {
     ALL_JOBS = csvJobs;
     DATA_SOURCE = 'csv';
     setStatus(`✅ Loaded ${csvJobs.length} jobs from your GitHub CSV (last refresh: ${new Date().toLocaleTimeString()})`, 'success');
-    document.getElementById('source-status').textContent = `✅ ${csvJobs.length} from CSV`;
+    setEl('source-status', `✅ ${csvJobs.length} from CSV`);
   } else {
     // Fallback
     ALL_JOBS = FALLBACK_JOBS;
     DATA_SOURCE = 'fallback';
     const reason = csvError ? `CSV error: ${csvError}` : `CSV returned only ${csvJobs.length} valid rows`;
     setStatus(`⚠️ ${reason}. Showing embedded fallback dataset (${FALLBACK_JOBS.length} strong jobs) — click 🔄 to retry`, 'warning');
-    document.getElementById('source-status').textContent = `⚠️ Fallback (${FALLBACK_JOBS.length})`;
+    setEl('source-status', `⚠️ Fallback (${FALLBACK_JOBS.length})`);
   }
 
-  document.getElementById('last-fetch').textContent = new Date().toLocaleString();
+  setEl('last-fetch', new Date().toLocaleString());
   render();
   updateStats();
 }
