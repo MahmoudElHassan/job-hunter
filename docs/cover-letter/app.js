@@ -278,6 +278,37 @@ Generated ${today} · ${v.company} (${v.role}) · ${type} · Source: ${v.source_
 }
 
 // ===== Render =====
+function rebuildPlatformOptions(currentSelection) {
+  // Build the Platform dropdown options from the union of boards present
+  // in ALL_JOBS (live CSV data) and FALLBACK_JOBS (embedded dataset). This
+  // way a new board that shows up in the CSV appears in the filter
+  // automatically — no hard-coded list to maintain.
+  const el = document.getElementById('filter-platform');
+  if (!el) return;
+  const boards = new Set();
+  for (const r of ALL_JOBS) {
+    if (r.board) boards.add(String(r.board).toLowerCase());
+  }
+  for (const r of FALLBACK_JOBS) {
+    if (r.board) boards.add(String(r.board).toLowerCase());
+  }
+  // If a previous selection is no longer present in the data, keep it
+  // visible so the user can switch back to "All" without losing state.
+  if (currentSelection && currentSelection !== 'all') {
+    boards.add(currentSelection);
+  }
+  const sorted = [...boards].sort();
+  const options = ['<option value="all">All</option>'].concat(
+    sorted.map(b => {
+      const selected = (currentSelection === b) ? ' selected' : '';
+      // Display: capitalize first letter for readability
+      const label = b.charAt(0).toUpperCase() + b.slice(1);
+      return `<option value="${escapeHtml(b)}"${selected}>${escapeHtml(label)}</option>`;
+    })
+  );
+  el.innerHTML = options.join('');
+}
+
 function render() {
   const search = document.getElementById('search').value.toLowerCase();
   const minScore = parseInt(document.getElementById('filter-score').value);
@@ -286,10 +317,17 @@ function render() {
   // filter-company: 'all' (default, show all) or 'no' (hide Unknown companies)
   const companyFilter = document.getElementById('filter-company').value;
   const hideUnknown = companyFilter === 'no';
+  // filter-platform: 'all' (default) or board name (lowercase compare)
+  const platform = (document.getElementById('filter-platform') || {}).value || 'all';
+
+  // Rebuild Platform options dynamically from ALL_JOBS + FALLBACK_JOBS so
+  // a new board that appears in the CSV shows up automatically.
+  rebuildPlatformOptions(platform);
 
   let rows = ALL_JOBS.filter(r => {
     if (parseInt(r.score || 0) < minScore) return false;
     if (source && r.source_type !== source) return false;
+    if (platform !== 'all' && (r.board || '').toLowerCase() !== platform) return false;
     const currentStatus = GENERATED[r.id] ? 'generated' : (APPROVALS[r.id] ? 'approved' : 'new');
     if (status && currentStatus !== status) return false;
     if (hideUnknown && (!r.company || r.company.toLowerCase().trim() === 'unknown' || r.company.trim() === '')) return false;
@@ -301,7 +339,7 @@ function render() {
   });
 
   if (rows.length === 0) {
-    document.getElementById('vacancies').innerHTML = '<div class="empty">No jobs match your filters. Try lowering "Min score" or toggling "Hide Unknown".</div>';
+    document.getElementById('vacancies').innerHTML = '<div class="empty">No jobs match your filters. Try lowering "Min score", switching "Platform" to All, or toggling "Hide Unknown".</div>';
     return;
   }
 
@@ -778,7 +816,7 @@ function generateCoverLetterHTML(v, type) {
 }
 
 // Event listeners
-['search', 'filter-score', 'filter-source', 'filter-status', 'filter-company'].forEach(id => {
+['search', 'filter-score', 'filter-source', 'filter-platform', 'filter-status', 'filter-company'].forEach(id => {
   document.getElementById(id).addEventListener('input', render);
   document.getElementById(id).addEventListener('change', render);
 });
