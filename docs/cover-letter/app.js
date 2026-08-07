@@ -313,6 +313,26 @@ Generated ${today} · ${v.company} (${v.role}) · ${type} · Source: ${v.source_
 }
 
 // ===== Render =====
+function rowDateKey(r) {
+  // date_found is ISO; compare by YYYY-MM-DD in UTC.
+  const raw = (r.date_found || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '';
+}
+
+function matchesDateFilter(r, dateFilter) {
+  if (!dateFilter) return true;
+  const key = rowDateKey(r);
+  if (!key) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  if (dateFilter === 'today') return key === today;
+  const days = parseInt(dateFilter, 10);
+  if (!days) return true;
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - days);
+  const cutoffKey = cutoff.toISOString().slice(0, 10);
+  return key >= cutoffKey;
+}
+
 function rebuildPlatformOptions(currentSelection) {
   // Only boards present in the currently loaded jobs (CSV or fallback dataset).
   // Do not list every platform we can search — only what was collected.
@@ -349,6 +369,12 @@ function render() {
   const platform = (document.getElementById('filter-platform') || {}).value || 'all';
   // filter-posting-type: 'all' | 'job' (real postings) | 'post' (LinkedIn lead posts)
   const postingType = (document.getElementById('filter-posting-type') || {}).value || 'all';
+  // filter-date: '' | 'today' | '7' | '30' — compare against r.date_found
+  const dateFilter = (document.getElementById('filter-date') || {}).value || '';
+  // filter-status-csv: '' (all) | 'new' | 'tailored' | 'applied' | 'rejected'
+  // (uses the CSV `status` column, NOT the localStorage state that the
+  //  earlier "Status" filter used.)
+  const statusCSV = (document.getElementById('filter-status-csv') || {}).value || '';
 
   // Rebuild Platform options dynamically from ALL_JOBS + FALLBACK_JOBS so
   // a new board that appears in the CSV shows up automatically.
@@ -362,6 +388,8 @@ function render() {
     const st = (r.source_type || '').toLowerCase();
     if (postingType === 'job' && st === 'post') return false;
     if (postingType === 'post' && st !== 'post') return false;
+    if (!matchesDateFilter(r, dateFilter)) return false;
+    if (statusCSV && (r.status || 'new') !== statusCSV) return false;
     if (hideUnknown && (!r.company || r.company.toLowerCase().trim() === 'unknown' || r.company.trim() === '')) return false;
     if (search) {
       const haystack = `${r.company} ${r.role} ${r.stack_match} ${r.location}`.toLowerCase();
@@ -371,7 +399,7 @@ function render() {
   });
 
   if (rows.length === 0) {
-    document.getElementById('vacancies').innerHTML = '<div class="empty">No jobs match your filters. Try lowering "Min score", switching "Platform" or "Posting type" to All, or toggling "Hide Unknown".</div>';
+    document.getElementById('vacancies').innerHTML = '<div class="empty">No jobs match your filters. Try lowering "Min score", switching "Platform" or "Posting type" to All, widening the "Date" range, or toggling "Hide Unknown".</div>';
     return;
   }
 
@@ -848,7 +876,7 @@ function generateCoverLetterHTML(v, type) {
 }
 
 // Event listeners
-['search', 'filter-score', 'filter-source', 'filter-platform', 'filter-posting-type', 'filter-company'].forEach(id => {
+['search', 'filter-score', 'filter-source', 'filter-platform', 'filter-posting-type', 'filter-date', 'filter-status-csv', 'filter-company'].forEach(id => {
   document.getElementById(id).addEventListener('input', render);
   document.getElementById(id).addEventListener('change', render);
 });
