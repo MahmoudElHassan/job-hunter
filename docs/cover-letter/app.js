@@ -313,12 +313,13 @@ function render() {
   const search = document.getElementById('search').value.toLowerCase();
   const minScore = parseInt(document.getElementById('filter-score').value);
   const source = document.getElementById('filter-source').value;
-  const status = document.getElementById('filter-status').value;
   // filter-company: 'all' (default, show all) or 'no' (hide Unknown companies)
   const companyFilter = document.getElementById('filter-company').value;
   const hideUnknown = companyFilter === 'no';
   // filter-platform: 'all' (default) or board name (lowercase compare)
   const platform = (document.getElementById('filter-platform') || {}).value || 'all';
+  // filter-posting-type: 'all' | 'job' (real postings) | 'post' (LinkedIn lead posts)
+  const postingType = (document.getElementById('filter-posting-type') || {}).value || 'all';
 
   // Rebuild Platform options dynamically from ALL_JOBS + FALLBACK_JOBS so
   // a new board that appears in the CSV shows up automatically.
@@ -328,8 +329,10 @@ function render() {
     if (parseInt(r.score || 0) < minScore) return false;
     if (source && r.source_type !== source) return false;
     if (platform !== 'all' && (r.board || '').toLowerCase() !== platform) return false;
-    const currentStatus = GENERATED[r.id] ? 'generated' : (APPROVALS[r.id] ? 'approved' : 'new');
-    if (status && currentStatus !== status) return false;
+    // Posting type: 'job' = real applications, 'post' = LinkedIn lead posts
+    const st = (r.source_type || '').toLowerCase();
+    if (postingType === 'job' && st === 'post') return false;
+    if (postingType === 'post' && st !== 'post') return false;
     if (hideUnknown && (!r.company || r.company.toLowerCase().trim() === 'unknown' || r.company.trim() === '')) return false;
     if (search) {
       const haystack = `${r.company} ${r.role} ${r.stack_match} ${r.location}`.toLowerCase();
@@ -339,7 +342,7 @@ function render() {
   });
 
   if (rows.length === 0) {
-    document.getElementById('vacancies').innerHTML = '<div class="empty">No jobs match your filters. Try lowering "Min score", switching "Platform" to All, or toggling "Hide Unknown".</div>';
+    document.getElementById('vacancies').innerHTML = '<div class="empty">No jobs match your filters. Try lowering "Min score", switching "Platform" or "Posting type" to All, or toggling "Hide Unknown".</div>';
     return;
   }
 
@@ -816,7 +819,7 @@ function generateCoverLetterHTML(v, type) {
 }
 
 // Event listeners
-['search', 'filter-score', 'filter-source', 'filter-platform', 'filter-status', 'filter-company'].forEach(id => {
+['search', 'filter-score', 'filter-source', 'filter-platform', 'filter-posting-type', 'filter-company'].forEach(id => {
   document.getElementById(id).addEventListener('input', render);
   document.getElementById(id).addEventListener('change', render);
 });
