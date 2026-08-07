@@ -29,6 +29,20 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
+from searchers import get_searcher
+from searchers.linkedin import LinkedInJobsSearcher, LinkedInPostsSearcher
+from searchers.upwork import UpworkSearcher
+from searchers.mostaql import MostaqlSearcher
+
+# Dedicated searchers own URL filtering; do not re-apply global is_likely_job
+# (title rules like "… jobs" falsely reject valid LinkedIn posts).
+_DEDICATED_SEARCHERS = (
+    LinkedInJobsSearcher,
+    LinkedInPostsSearcher,
+    UpworkSearcher,
+    MostaqlSearcher,
+)
+
 # ---------- Paths ----------
 ROOT = Path(__file__).parent
 DATA = ROOT / "data"
@@ -569,8 +583,11 @@ def format_telegram(item: dict[str, str]) -> str:
     """Format a single listing for Telegram."""
     score = item["score"]
     emoji = {5: "🔥", 4: "🟢", 3: "⚪", 2: "🟡"}.get(int(score), "•")
+    is_post = item.get("source_type") == "post"
+    # Posts are leads, not direct apply links — flag them clearly.
+    prefix = "🪧 Post" if is_post else emoji
     return (
-        f"{emoji} **{item['company']}** — {item['role']}\n"
+        f"{prefix} **{item['company']}** — {item['role']}\n"
         f"📍 {item['location'] or 'N/A'}"
         f"{' · 🏠 Remote' if item['remote'] == 'yes' else ''}"
         f"{' · ✈️ Sponsorship' if item['sponsorship'] == 'yes' else ''}\n"
@@ -595,32 +612,44 @@ def run_scan(
 
     for q in queries:
         stats["queries"] += 1
-        query_text = q["query"]
         location_filter = q.get("location_filter", "")
-        print(f"🔍 [{stats['queries']}] {query_text} ({location_filter or 'any'})")
 
+        # Per-platform searcher: builds the right `site:` query and
+        # applies the right URL accept filter. The generic searcher
+        # is the fallback for boards without a dedicated one.
+        searcher = get_searcher(q.get("board", ""))
+        query_text = searcher.build_query(q)
+        is_dedicated = isinstance(searcher, _DEDICATED_SEARCHERS)
+        print(f"🔍 [{stats['queries']}] board={searcher.board}  q={query_text} ({location_filter or 'any'})")
+
+        results = searcher.search(q, tavily_key, dry_run=dry_run)
         if dry_run:
-            # Dry-run: skip network calls entirely
             print(f"   [dry-run] skipped API call")
-            results = []
-        else:
-            results = tavily_search(query_text, tavily_key)
         stats["results"] += len(results)
 
         for r in results:
-            url = r.get("url", "")
-            title = r.get("title", "")
-            content = r.get("content", "")
+            url = r.url
+            title = r.title
+            content = r.content
+            platform_board = r.board
+            platform_source = r.source_type
 
             if not url or not title:
                 continue
 
-            # Phase 2: drop non-job results (Reddit / blog / index pages) before
-            # anything else. Log every skip so the rule list can be tuned from
-            # Actions logs.
-            if not is_likely_job(title, url, content):
-                print(f"   skipped noise: {url}")
+            # Per-platform accept_url (already applied inside .search for
+            # dedicated boards, but GenericBoardSearcher is permissive).
+            if not searcher.accept_url(url):
+                print(f"   skipped noise (searcher): {url}")
                 continue
+
+            # Global is_likely_job ONLY for generic boards. Dedicated
+            # searchers already filtered via accept_url; title heuristics
+            # (e.g. ending in "jobs") falsely drop LinkedIn posts.
+            if not is_dedicated:
+                if not is_likely_job(title, url, content):
+                    print(f"   skipped noise: {url}")
+                    continue
 
             # Dedup
             url_key = f"url:{url.lower()}"
@@ -630,6 +659,14 @@ def run_scan(
                 continue
 
             score, source = score_result(title, url, content)
+            # Source type from the searcher wins — don't let keyword
+            # "contract" override a Greenhouse/LinkedIn job into
+            # freelance incorrectly.
+            if platform_source in ("main", "freelance", "post", "oss"):
+                source = platform_source
+            # Post leads (LinkedIn posts) cap at 4 — never become 5★.
+            if source == "post" and score > 4:
+                score = 4
             if score <= 2:
                 continue  # don't pollute the CSV with low-quality
 
@@ -643,14 +680,21 @@ def run_scan(
                 kw for kw in PROFILE["tech_stack_keywords"] if kw in text_lower
             ][:5])
 
-            # Board detection
-            board = "unknown"
-            for b in ["linkedin", "bayt", "gulftalent", "indeed", "glassdoor",
-                      "remoteok", "arc.dev", "weworkremotely", "upwork", "toptal",
-                      "mostaql", "contra", "braintrust", "github.com"]:
-                if b in url:
-                    board = b
-                    break
+            # Board name: prefer the searcher's tagged board; fall back
+            # to URL keyword scan if still unknown.
+            board = platform_board
+            if not board or board == "unknown":
+                for b in ["linkedin", "bayt", "gulftalent", "indeed", "glassdoor",
+                          "remoteok", "arc.dev", "weworkremotely", "upwork", "toptal",
+                          "mostaql", "contra", "braintrust", "github.com",
+                          "greenhouse", "lever", "workday", "ashbyhq",
+                          "jaabz", "dice", "builtin", "peopleperhour",
+                          "news.ycombinator"]:
+                    if b in url:
+                        board = b
+                        break
+            if not board:
+                board = "unknown"
 
             row = {
                 "id": f"JOB-{scan_id}-{stats['new']+1:03d}",
@@ -690,7 +734,6 @@ def run_scan(
                 stats["score_4"] += 1
                 if len(notified_buffer) < MAX_NOTIFICATIONS_PER_SCAN:
                     notified_buffer.append(row)
-
     # Send notifications
     if notified_buffer and not dry_run:
         header = f"🎯 *Job Hunter — {stats['new']} new match{'es' if stats['new'] != 1 else ''}*\n"
@@ -731,7 +774,7 @@ def main():
     tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-    if not tavily_key:
+    if not tavily_key and not args.dry_run:
         sys.exit("❌ TAVILY_API_KEY not set. See .env.example.")
 
     if args.query:
