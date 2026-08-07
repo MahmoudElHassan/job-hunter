@@ -17,15 +17,66 @@ const PROFILE = {
 
 const CSV_URL = 'https://raw.githubusercontent.com/MahmoudElHassan/job-hunter/main/data/Job_Listings.csv';
 
-// ===== Fallback dataset (real, strong jobs from previous scans) =====
-const FALLBACK_JOBS = [
+// Canonical board labels (option values stay lowercase as written to CSV).
+const PRIORITY_BOARDS = [
+  'linkedin', 'upwork', 'mostaql',
+  'bayt', 'gulftalent', 'indeed', 'glassdoor',
+  'remoteok', 'weworkremotely', 'arc.dev',
+  'toptal', 'contra', 'braintrust', 'peopleperhour',
+  'greenhouse', 'lever', 'workday',
+  'news.ycombinator', 'github.com',
+];
+const BOARD_LABELS = {
+  linkedin: 'LinkedIn', upwork: 'Upwork', mostaql: 'Mostaql',
+  bayt: 'Bayt', gulftalent: 'GulfTalent', indeed: 'Indeed', glassdoor: 'Glassdoor',
+  remoteok: 'RemoteOK', weworkremotely: 'We Work Remotely', 'arc.dev': 'Arc.dev',
+  toptal: 'Toptal', contra: 'Contra', braintrust: 'Braintrust', peopleperhour: 'PeoplePerHour',
+  greenhouse: 'Greenhouse', lever: 'Lever', workday: 'Workday',
+  ashbyhq: 'Ashby', jaabz: 'Jaabz', dice: 'Dice', builtin: 'Built In',
+  'news.ycombinator': 'Hacker News', 'github.com': 'GitHub',
+  wuzzuf: 'Wuzzuf',
+};
+
+function boardLabel(board) {
+  const key = (board || '').toLowerCase();
+  if (!key) return '—';
+  return BOARD_LABELS[key] || key;
+}
+
+function normalizeBoard(board, url) {
+  const b = (board || '').toLowerCase().trim();
+  const aliases = {
+    'bayt.com': 'bayt', linkedin: 'linkedin', 'direct': 'unknown',
+    naukrigulf: 'unknown', wuzzuf: 'wuzzuf',
+  };
+  if (aliases[b]) return aliases[b];
+  if (b === 'bayt.com' || b.startsWith('bayt')) return 'bayt';
+  const u = (url || '').toLowerCase();
+  if (u.includes('linkedin.com')) return 'linkedin';
+  if (u.includes('bayt.com')) return 'bayt';
+  if (u.includes('upwork.com')) return 'upwork';
+  if (u.includes('mostaql.com')) return 'mostaql';
+  if (u.includes('wuzzuf.net')) return 'wuzzuf';
+  return b || 'unknown';
+}
+
+function inferSourceType(sourceType, url) {
+  const u = (url || '').toLowerCase();
+  if (u.includes('linkedin.com/posts/') || u.includes('linkedin.com/feed/update/')) {
+    return 'post';
+  }
+  return (sourceType || 'main').toLowerCase();
+}
+
+// ===== Fallback dataset (normalized to CSV board / source_type values) =====
+const FALLBACK_JOBS_RAW = [
   {
     id: "talent-360-sifi-2025",
     score: "5", source_type: "main", date_found: "2026-07-26",
     company: "Talent 360 / SiFi", role: "Mid-level Backend Engineer (.NET) — FinTech expense management for KSA",
     location: "Remote, Egypt", remote: "yes", sponsorship: "yes",
     stack_match: "asp.net core, ef core, sql server, postgresql, mongodb, redis, docker, azure",
-    board: "Bayt.com", url: "https://www.bayt.com/en/egypt/jobs/.net-backend-jobs/",
+    board: "bayt", url: "https://www.bayt.com/en/egypt/jobs/.net-backend-jobs/",
     status: "new", notes: "Mid-level + KSA market + FinTech (top match)"
   },
   {
@@ -34,7 +85,7 @@ const FALLBACK_JOBS = [
     company: "Easycash", role: "Mid-Level .NET Developer (ASP.NET Core / ABP Framework) — ERP",
     location: "Hybrid — Nasr City, Cairo, Egypt", remote: "no", sponsorship: "no",
     stack_match: "asp.net core, abp framework, postgresql, rest apis, git, clean architecture",
-    board: "LinkedIn", url: "https://www.linkedin.com/posts/easycashwallet_were-hiring-mid-level-net-developer-activity-7438669637761949697-P_gC",
+    board: "linkedin", url: "https://www.linkedin.com/posts/easycashwallet_were-hiring-mid-level-net-developer-activity-7438669637761949697-P_gC",
     status: "new", notes: "ABP Framework direct match for Clean Architecture"
   },
   {
@@ -43,17 +94,8 @@ const FALLBACK_JOBS = [
     company: "CodeTact Recruit", role: "Backend Engineer (.NET) — FinTech & Enterprise",
     location: "Hybrid, Cairo (2-3 days onsite)", remote: "no", sponsorship: "no",
     stack_match: ".net, asp.net core, web apis, sql server, git, agile",
-    board: "LinkedIn", url: "https://www.linkedin.com/posts/codetact-recruit_dotnet-backenddeveloper-egyptjobs-activity-7409358001045680128--9mG",
+    board: "linkedin", url: "https://www.linkedin.com/posts/codetact-recruit_dotnet-backenddeveloper-egyptjobs-activity-7409358001045680128--9mG",
     status: "new", notes: "USD-based compensation"
-  },
-  {
-    id: "acksession-2025",
-    score: "4", source_type: "main", date_found: "2026-07-26",
-    company: "Acksession", role: "Mid-Level Backend Engineer (.NET)",
-    location: "Remote, Egypt", remote: "yes", sponsorship: "no",
-    stack_match: ".net framework, c#, api design, database design, design patterns",
-    board: "Direct", url: "https://remoteworkjobs.ai/Job/job-listings-mid-level-backend-engineer-net-remote--155",
-    status: "new", notes: "Remote-friendly, mid-level"
   },
   {
     id: "smartware-2025",
@@ -61,7 +103,7 @@ const FALLBACK_JOBS = [
     company: "SMARTWARE", role: "Junior .NET Core Developer",
     location: "Remote, Egypt", remote: "yes", sponsorship: "no",
     stack_match: ".net core, c#, asp.net, sql server",
-    board: "Direct", url: "https://www.linkedin.com/jobs/view/4180360320",
+    board: "linkedin", url: "https://www.linkedin.com/jobs/view/4180360320",
     status: "new", notes: "Junior-level title (matches your self-identification)"
   },
   {
@@ -70,17 +112,8 @@ const FALLBACK_JOBS = [
     company: "RTR Software Solutions", role: "Mid Level Backend Developer (.NET Core)",
     location: "On-site, Cairo, Egypt", remote: "no", sponsorship: "no",
     stack_match: ".net, .net core, c#, sql server, azure, git",
-    board: "Wuzzuf", url: "https://wuzzuf.net/jobs/p/gvuqbwokyxyk-mid-level-backend-developernet-core-rtr-software-solutions-cairo-egypt",
+    board: "wuzzuf", url: "https://wuzzuf.net/jobs/p/gvuqbwokyxyk-mid-level-backend-developernet-core-rtr-software-solutions-cairo-egypt",
     status: "new", notes: "On-site Cairo, mid-level"
-  },
-  {
-    id: "squadio-2025",
-    score: "3", source_type: "main", date_found: "2026-07-26",
-    company: "Squadio", role: "Mid-Senior .NET Backend Developer — USD-paid contract",
-    location: "Remote (Egypt-friendly)", remote: "yes", sponsorship: "no",
-    stack_match: ".net core, c#, asp.net, ef, sql server, postgresql, azure, aws",
-    board: "Direct", url: "https://3abkry.com/en/saudi-arabia/jobs/mid-senior-net-backend-developer-6002",
-    status: "new", notes: "USD-paid contract"
   },
   {
     id: "swatx-2025",
@@ -88,7 +121,7 @@ const FALLBACK_JOBS = [
     company: "SWATX", role: "Mid-Level .NET Developer",
     location: "Cairo, Egypt", remote: "no", sponsorship: "no",
     stack_match: "asp.net mvc, .net core, sql server, rest apis, ef core, git",
-    board: "LinkedIn", url: "https://www.linkedin.com/jobs/view/4180360320",
+    board: "linkedin", url: "https://www.linkedin.com/jobs/view/4180360320",
     status: "new", notes: "On-site Cairo, mid-level"
   },
   {
@@ -97,19 +130,16 @@ const FALLBACK_JOBS = [
     company: "Adree", role: ".NET Backend Developer",
     location: "HQ, Cairo, Egypt", remote: "no", sponsorship: "no",
     stack_match: "c#, asp.net core, web apis, ef, sql, jwt, oop",
-    board: "LinkedIn", url: "https://www.linkedin.com/jobs/view/4440006091",
+    board: "linkedin", url: "https://www.linkedin.com/jobs/view/4440006091",
     status: "new", notes: "On-site Cairo, mid-level"
   },
-  {
-    id: "waffarx-2025",
-    score: "3", source_type: "main", date_found: "2026-07-26",
-    company: "Waffarx", role: "Net Developer",
-    location: "Cairo, Egypt", remote: "no", sponsorship: "no",
-    stack_match: "c#, web application, devops, agile",
-    board: "NaukriGulf", url: "https://www.naukrigulf.com/dot-net-developer-jobs-in-uae",
-    status: "new", notes: "On-site Cairo"
-  }
 ];
+
+const FALLBACK_JOBS = FALLBACK_JOBS_RAW.map(r => ({
+  ...r,
+  board: normalizeBoard(r.board, r.url),
+  source_type: inferSourceType(r.source_type, r.url),
+}));
 
 let ALL_JOBS = [];
 let DATA_SOURCE = 'fallback';
@@ -132,7 +162,12 @@ async function loadData(forceReload = false) {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const text = await resp.text();
     const parsed = parseCSV(text);
-    csvJobs = parsed.filter(r => r.id);
+    // Normalize board / source_type to match scanner CSV values.
+    csvJobs = parsed.filter(r => r.id).map(r => ({
+      ...r,
+      board: normalizeBoard(r.board, r.url),
+      source_type: inferSourceType(r.source_type, r.url),
+    }));
   } catch (e) {
     csvError = e.message;
   }
@@ -279,31 +314,27 @@ Generated ${today} · ${v.company} (${v.role}) · ${type} · Source: ${v.source_
 
 // ===== Render =====
 function rebuildPlatformOptions(currentSelection) {
-  // Build the Platform dropdown options from the union of boards present
-  // in ALL_JOBS (live CSV data) and FALLBACK_JOBS (embedded dataset). This
-  // way a new board that shows up in the CSV appears in the filter
-  // automatically — no hard-coded list to maintain.
+  // Seed priority platforms (always visible even when CSV is header-only),
+  // then merge boards from live CSV + fallback. Option values stay lowercase
+  // to match Job_Listings.csv; labels use BOARD_LABELS.
   const el = document.getElementById('filter-platform');
   if (!el) return;
-  const boards = new Set();
+  const boards = new Set(PRIORITY_BOARDS);
   for (const r of ALL_JOBS) {
     if (r.board) boards.add(String(r.board).toLowerCase());
   }
   for (const r of FALLBACK_JOBS) {
     if (r.board) boards.add(String(r.board).toLowerCase());
   }
-  // If a previous selection is no longer present in the data, keep it
-  // visible so the user can switch back to "All" without losing state.
   if (currentSelection && currentSelection !== 'all') {
     boards.add(currentSelection);
   }
-  const sorted = [...boards].sort();
+  const extras = [...boards].filter(b => !PRIORITY_BOARDS.includes(b)).sort();
+  const ordered = PRIORITY_BOARDS.concat(extras);
   const options = ['<option value="all">All</option>'].concat(
-    sorted.map(b => {
+    ordered.map(b => {
       const selected = (currentSelection === b) ? ' selected' : '';
-      // Display: capitalize first letter for readability
-      const label = b.charAt(0).toUpperCase() + b.slice(1);
-      return `<option value="${escapeHtml(b)}"${selected}>${escapeHtml(label)}</option>`;
+      return `<option value="${escapeHtml(b)}"${selected}>${escapeHtml(boardLabel(b))}</option>`;
     })
   );
   el.innerHTML = options.join('');

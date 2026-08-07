@@ -207,8 +207,8 @@
     <select id="filter-score">
       <option value="0">All</option>
       <option value="3">3+</option>
-      <option value="4">4+ (strong)</option>
-      <option value="5" selected>5 only (top)</option>
+      <option value="4" selected>4+ (strong)</option>
+      <option value="5">5 only (top)</option>
     </select>
   </div>
   <div class="filter-group">
@@ -217,7 +217,16 @@
       <option value="">All</option>
       <option value="main">Main jobs</option>
       <option value="freelance">Freelance</option>
+      <option value="post">Posts (LinkedIn leads)</option>
       <option value="oss">OSS</option>
+      <option value="unknown">Unknown</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Platform</label>
+    <select id="filter-platform">
+      <option value="" selected>All</option>
+      <!-- filled/merged by rebuildPlatformOptions() -->
     </select>
   </div>
   <div class="filter-group">
@@ -227,6 +236,7 @@
       <option value="new">New</option>
       <option value="tailored">Tailored</option>
       <option value="applied">Applied</option>
+      <option value="rejected">Rejected</option>
     </select>
   </div>
 </section>
@@ -240,6 +250,7 @@
         <th data-sort="role">Role</th>
         <th data-sort="location">Location</th>
         <th data-sort="source_type">Source</th>
+        <th data-sort="board">Board</th>
         <th>Stack</th>
         <th>URL</th>
         <th data-sort="date_found">Date</th>
@@ -248,7 +259,7 @@
       </tr>
     </thead>
     <tbody id="rows">
-      <tr><td colspan="10" class="empty">Loading...</td></tr>
+      <tr><td colspan="11" class="empty">Loading...</td></tr>
     </tbody>
   </table>
 </div>
@@ -264,6 +275,51 @@ let allRows = [];
 let sortKey = 'score';
 let sortDir = 'desc';
 
+// Canonical board values (lowercase) as written by searchers / run_scan.
+const PRIORITY_BOARDS = [
+  'linkedin', 'upwork', 'mostaql',
+  'bayt', 'gulftalent', 'indeed', 'glassdoor',
+  'remoteok', 'weworkremotely', 'arc.dev',
+  'toptal', 'contra', 'braintrust', 'peopleperhour',
+  'greenhouse', 'lever', 'workday',
+  'news.ycombinator', 'github.com',
+];
+const BOARD_LABELS = {
+  linkedin: 'LinkedIn', upwork: 'Upwork', mostaql: 'Mostaql',
+  bayt: 'Bayt', gulftalent: 'GulfTalent', indeed: 'Indeed', glassdoor: 'Glassdoor',
+  remoteok: 'RemoteOK', weworkremotely: 'We Work Remotely', 'arc.dev': 'Arc.dev',
+  toptal: 'Toptal', contra: 'Contra', braintrust: 'Braintrust', peopleperhour: 'PeoplePerHour',
+  greenhouse: 'Greenhouse', lever: 'Lever', workday: 'Workday',
+  ashbyhq: 'Ashby', jaabz: 'Jaabz', dice: 'Dice', builtin: 'Built In',
+  'news.ycombinator': 'Hacker News', 'github.com': 'GitHub',
+};
+
+function boardLabel(board) {
+  const key = (board || '').toLowerCase();
+  if (!key) return '—';
+  return BOARD_LABELS[key] || key;
+}
+
+function rebuildPlatformOptions(currentSelection) {
+  const el = document.getElementById('filter-platform');
+  if (!el) return;
+  const boards = new Set(PRIORITY_BOARDS);
+  for (const r of allRows) {
+    if (r.board) boards.add(String(r.board).toLowerCase());
+  }
+  if (currentSelection) boards.add(currentSelection);
+  // Priority order first, then any extras alphabetically.
+  const extras = [...boards].filter(b => !PRIORITY_BOARDS.includes(b)).sort();
+  const ordered = PRIORITY_BOARDS.concat(extras);
+  const options = ['<option value="">All</option>'].concat(
+    ordered.map(b => {
+      const selected = currentSelection === b ? ' selected' : '';
+      return `<option value="${escapeHtml(b)}"${selected}>${escapeHtml(boardLabel(b))}</option>`;
+    })
+  );
+  el.innerHTML = options.join('');
+}
+
 async function loadData() {
   try {
     const resp = await fetch(CSV_URL, { cache: 'no-store' });
@@ -271,11 +327,13 @@ async function loadData() {
     const text = await resp.text();
     allRows = parseCSV(text);
     document.getElementById('last-updated').textContent = new Date().toLocaleString();
+    rebuildPlatformOptions(document.getElementById('filter-platform').value || '');
     render();
     updateStats();
   } catch (e) {
+    rebuildPlatformOptions('');
     document.getElementById('rows').innerHTML =
-      `<tr><td colspan="10" class="empty">⚠️ Failed to load: ${e.message}<br><br>Check the <a href="${CSV_URL}" style="color: var(--accent)">raw CSV</a> or wait for the next scan.</td></tr>`;
+      `<tr><td colspan="11" class="empty">⚠️ Failed to load: ${e.message}<br><br>Check the <a href="${CSV_URL}" style="color: var(--accent)">raw CSV</a> or wait for the next scan.</td></tr>`;
   }
 }
 
@@ -353,14 +411,16 @@ function render() {
   const search = document.getElementById('search').value.toLowerCase();
   const minScore = parseInt(document.getElementById('filter-score').value);
   const source = document.getElementById('filter-source').value;
+  const platform = document.getElementById('filter-platform').value;
   const status = document.getElementById('filter-status').value;
 
   let rows = allRows.filter(r => {
     if (parseInt(r.score || 0) < minScore) return false;
     if (source && r.source_type !== source) return false;
+    if (platform && (r.board || '').toLowerCase() !== platform) return false;
     if (status && (r.status || 'new') !== status) return false;
     if (search) {
-      const haystack = `${r.company} ${r.role} ${r.stack_match} ${r.location}`.toLowerCase();
+      const haystack = `${r.company} ${r.role} ${r.stack_match} ${r.location} ${r.board}`.toLowerCase();
       if (!haystack.includes(search)) return false;
     }
     return true;
@@ -376,7 +436,7 @@ function render() {
   });
 
   const html = rows.length === 0
-    ? '<tr><td colspan="10" class="empty">No jobs match your filters.</td></tr>'
+    ? '<tr><td colspan="11" class="empty">No jobs match your filters.</td></tr>'
     : rows.map(r => rowHTML(r)).join('');
   document.getElementById('rows').innerHTML = html;
 }
@@ -395,6 +455,7 @@ function rowHTML(r) {
       <td>${escapeHtml(r.role || '—')}</td>
       <td>${escapeHtml(loc)}</td>
       <td><span class="source-tag">${escapeHtml(r.source_type || '—')}</span></td>
+      <td><span class="source-tag">${escapeHtml(boardLabel(r.board))}</span></td>
       <td style="font-size: 11px; color: var(--text-dim);">${escapeHtml(stack)}</td>
       <td class="url-cell">${link}</td>
       <td style="font-size: 11px; color: var(--text-dim);">${date}</td>
@@ -427,6 +488,7 @@ async function copyId(id) {
 document.getElementById('search').addEventListener('input', render);
 document.getElementById('filter-score').addEventListener('change', render);
 document.getElementById('filter-source').addEventListener('change', render);
+document.getElementById('filter-platform').addEventListener('change', render);
 document.getElementById('filter-status').addEventListener('change', render);
 
 document.querySelectorAll('th[data-sort]').forEach(th => {
@@ -444,8 +506,9 @@ document.querySelectorAll('th[data-sort]').forEach(th => {
   });
 });
 
-// Initial sort indicator
+// Initial sort indicator + platform options (even before CSV loads)
 document.querySelector('th[data-sort="score"]').classList.add('sort-desc');
+rebuildPlatformOptions('');
 
 loadData();
 // Auto-refresh every 5 min
