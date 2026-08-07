@@ -314,27 +314,25 @@ Generated ${today} · ${v.company} (${v.role}) · ${type} · Source: ${v.source_
 
 // ===== Render =====
 function rebuildPlatformOptions(currentSelection) {
-  // Seed priority platforms (always visible even when CSV is header-only),
-  // then merge boards from live CSV + fallback. Option values stay lowercase
-  // to match Job_Listings.csv; labels use BOARD_LABELS.
+  // Only boards present in the currently loaded jobs (CSV or fallback dataset).
+  // Do not list every platform we can search — only what was collected.
   const el = document.getElementById('filter-platform');
   if (!el) return;
-  const boards = new Set(PRIORITY_BOARDS);
+  const present = new Set();
   for (const r of ALL_JOBS) {
-    if (r.board) boards.add(String(r.board).toLowerCase());
+    const b = (r.board || '').toLowerCase().trim();
+    if (b && b !== 'unknown') present.add(b);
   }
-  for (const r of FALLBACK_JOBS) {
-    if (r.board) boards.add(String(r.board).toLowerCase());
-  }
-  if (currentSelection && currentSelection !== 'all') {
-    boards.add(currentSelection);
-  }
-  const extras = [...boards].filter(b => !PRIORITY_BOARDS.includes(b)).sort();
-  const ordered = PRIORITY_BOARDS.concat(extras);
+  const ordered = PRIORITY_BOARDS.filter(b => present.has(b)).concat(
+    [...present].filter(b => !PRIORITY_BOARDS.includes(b)).sort()
+  );
+  const selected = (currentSelection && currentSelection !== 'all' && present.has(currentSelection))
+    ? currentSelection
+    : 'all';
   const options = ['<option value="all">All</option>'].concat(
     ordered.map(b => {
-      const selected = (currentSelection === b) ? ' selected' : '';
-      return `<option value="${escapeHtml(b)}"${selected}>${escapeHtml(boardLabel(b))}</option>`;
+      const sel = selected === b ? ' selected' : '';
+      return `<option value="${escapeHtml(b)}"${sel}>${escapeHtml(boardLabel(b))}</option>`;
     })
   );
   el.innerHTML = options.join('');

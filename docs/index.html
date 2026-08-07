@@ -307,20 +307,23 @@ function boardLabel(board) {
 }
 
 function rebuildPlatformOptions(currentSelection) {
+  // Only boards that appear in collected CSV rows — not the full searcher list.
   const el = document.getElementById('filter-platform');
   if (!el) return;
-  const boards = new Set(PRIORITY_BOARDS);
+  const present = new Set();
   for (const r of allRows) {
-    if (r.board) boards.add(String(r.board).toLowerCase());
+    const b = (r.board || '').toLowerCase().trim();
+    if (b && b !== 'unknown') present.add(b);
   }
-  if (currentSelection) boards.add(currentSelection);
-  // Priority order first, then any extras alphabetically.
-  const extras = [...boards].filter(b => !PRIORITY_BOARDS.includes(b)).sort();
-  const ordered = PRIORITY_BOARDS.concat(extras);
+  // Keep priority order for boards that exist, then any other collected boards.
+  const ordered = PRIORITY_BOARDS.filter(b => present.has(b)).concat(
+    [...present].filter(b => !PRIORITY_BOARDS.includes(b)).sort()
+  );
+  const selected = (currentSelection && present.has(currentSelection)) ? currentSelection : '';
   const options = ['<option value="">All</option>'].concat(
     ordered.map(b => {
-      const selected = currentSelection === b ? ' selected' : '';
-      return `<option value="${escapeHtml(b)}"${selected}>${escapeHtml(boardLabel(b))}</option>`;
+      const sel = selected === b ? ' selected' : '';
+      return `<option value="${escapeHtml(b)}"${sel}>${escapeHtml(boardLabel(b))}</option>`;
     })
   );
   el.innerHTML = options.join('');
