@@ -29,7 +29,7 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
-from searchers import get_searcher
+from searchers import get_searcher, canonicalize_url
 from searchers.linkedin import LinkedInJobsSearcher, LinkedInPostsSearcher
 from searchers.upwork import UpworkSearcher
 from searchers.mostaql import MostaqlSearcher
@@ -154,11 +154,12 @@ def load_existing_listings() -> set[str]:
     with LISTINGS_CSV.open(encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            url = (row.get("url") or "").strip().lower()
+            url_raw = (row.get("url") or "").strip()
+            url_canon = canonicalize_url(url_raw)
             company = (row.get("company") or "").strip().lower()
             role = (row.get("role") or "").strip().lower()
-            if url:
-                keys.add(f"url:{url}")
+            if url_canon:
+                keys.add(f"url:{url_canon}")
             if company and role:
                 keys.add(f"cr:{company}|{role}")
     return keys
@@ -211,7 +212,6 @@ def is_likely_job(title: str, url: str, content: str) -> bool:
         "gulftalent.com/job/",
         "wellfound.com/jobs/",
         "upwork.com/jobs/",
-        "toptal.com/freelance-jobs/",
     )
     if any(h in url_l for h in allow_hosts):
         return True
@@ -475,6 +475,113 @@ def score_result(title: str, url: str, content: str) -> tuple[int, str]:
     return (1, source)
 
 
+def is_closed_posting(title: str, content: str) -> bool:
+    """Return True if the title/content strongly indicates the posting is closed.
+
+    Conservative: only matches explicit "no longer available" / "expired"
+    style language in English and Arabic. False negatives are recoverable
+    (we just keep a closed posting); false positives (we drop a real job)
+    are not — so we lean on multi-word patterns.
+    """
+    text = f"{title or ''} {content or ''}".lower()
+    if not text.strip():
+        return False
+    closed_signals = (
+        "no longer available",
+        "this job is closed",
+        "job is closed",
+        "position has been filled",
+        "position is filled",
+        "no longer accepting",
+        "no longer accepting applications",
+        "applications are closed",
+        "applications have closed",
+        "application deadline has passed",
+        "deadline has passed",
+        "vacancy closed",
+        "this vacancy has been filled",
+        "this position is no longer",
+        "this role has been filled",
+        "job expired",
+        "posting expired",
+        "this listing has expired",
+        "not accepting applications",
+        "تم إغلاق",
+        "تم اغلاق",
+        "انتهى التقديم",
+        "انتهت التقديم",
+        "الوظيفة مغلقة",
+        "الوظائف مغلقة",
+        "شغلت هذه الوظيفة",
+    )
+    return any(sig in text for sig in closed_signals)
+
+
+# Cap live HTTP checks per scan so we stay under Actions timeout-minutes.
+LIVE_CHECK_MAX_PER_SCAN = 20
+_LIVE_CHECK_CALLS = 0
+
+# Path fragments that scream "category / search / closed" landing.
+_CLOSED_PATH_HINTS = (
+    "/search",
+    "/jobs/search",
+    "closedjob",
+    "job-closed",
+    "position-closed",
+    "/category/",
+    "/categories/",
+    "/archive/",
+)
+
+
+def url_looks_alive(url: str, *, timeout: float = 5.0) -> bool:
+    """Lightweight liveness probe.
+
+    Returns True if the URL appears reachable AND not a category/closed
+    landing. Network / timeout errors return True (fail-open) — we only
+    drop on a hard 4xx/5xx HTTP status or a clearly-closed URL pattern.
+
+    Capped by `LIVE_CHECK_MAX_PER_SCAN` per process to keep Actions
+    runtime under 10 minutes.
+    """
+    global _LIVE_CHECK_CALLS
+    if not url:
+        return True
+    if _LIVE_CHECK_CALLS >= LIVE_CHECK_MAX_PER_SCAN:
+        return True
+    _LIVE_CHECK_CALLS += 1
+    url_l = url.lower()
+    if any(hint in url_l for hint in _CLOSED_PATH_HINTS):
+        return False
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (compatible; JobHunterBot/1.0; +https://github.com/MahmoudElHassan/job-hunter)"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    try:
+        resp = requests.head(url, headers=headers, timeout=timeout, allow_redirects=True)
+        status = resp.status_code
+        # Some hosts reject HEAD (405/403); fall back to a small GET.
+        if status in (405, 403, 400):
+            resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True, stream=True)
+            try:
+                resp.close()
+            except Exception:
+                pass
+            status = resp.status_code
+        if status >= 400:
+            return False
+        # Final URL after redirects should not be a search/category page.
+        final = (resp.url or url).lower()
+        if any(hint in final for hint in _CLOSED_PATH_HINTS):
+            return False
+        return True
+    except requests.RequestException:
+        # Fail-open: network/timeout errors do not drop the listing.
+        return True
+
+
 def extract_company_role(title: str, url: str) -> tuple[str, str]:
     """Best-effort extract company and role from a search result."""
     # Heuristics: titles often have "Role at Company" or "Company - Role"
@@ -651,8 +758,17 @@ def run_scan(
                     print(f"   skipped noise: {url}")
                     continue
 
-            # Dedup
-            url_key = f"url:{url.lower()}"
+            # Reject closed postings BEFORE scoring/saving. Be conservative:
+            # we only drop on explicit "no longer available" / Arabic
+            # equivalents — false positives would lose real jobs.
+            if is_closed_posting(title, content):
+                print(f"   skipped closed posting: {url}")
+                continue
+
+            # Dedup against canonical (host lowered, trailing / stripped,
+            # tracking params dropped) URL so different tracking variants
+            # of the same posting count as one.
+            url_key = f"url:{canonicalize_url(url)}"
             company_guess, role_guess = extract_company_role(title, url)
             cr_key = f"cr:{company_guess.lower()}|{role_guess.lower()}"
             if url_key in existing or cr_key in existing:
@@ -669,6 +785,15 @@ def run_scan(
                 score = 4
             if score <= 2:
                 continue  # don't pollute the CSV with low-quality
+
+            # Live HEAD/GET check for high-scoring results only. Drops on
+            # 4xx/5xx and on clearly-closed redirect targets. Network /
+            # timeout errors fail-open so we don't lose jobs to flaky
+            # connectivity. Capped by LIVE_CHECK_MAX_PER_SCAN.
+            if score >= 4:
+                if not url_looks_alive(url):
+                    print(f"   skipped dead/closed URL: {url}")
+                    continue
 
             # Determine remote/sponsorship flags
             text_lower = f"{title} {content}".lower()

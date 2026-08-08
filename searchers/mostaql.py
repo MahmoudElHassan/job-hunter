@@ -36,7 +36,7 @@ class MostaqlSearcher:
         if dry_run:
             return []
         query = self.build_query(row)
-        raw = tavily_search(query, api_key)
+        raw = tavily_search(query, api_key, freshness_days=_safe_int(row.get("freshness_days")))
         out: list[RawResult] = []
         for r in raw:
             url = normalize_url(r.get("url", ""))
@@ -58,3 +58,10 @@ class MostaqlSearcher:
         if _MOSTAQL_REJECT.search(url_l):
             return False
         return bool(_MOSTAQL_DETAIL.search(url_l))
+
+
+def _safe_int(v) -> int | None:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None

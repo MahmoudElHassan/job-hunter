@@ -57,7 +57,7 @@ class LinkedInJobsSearcher:
         if dry_run:
             return []
         query = self.build_query(row)
-        raw = tavily_search(query, api_key)
+        raw = tavily_search(query, api_key, freshness_days=_safe_int(row.get("freshness_days")))
         out: list[RawResult] = []
         for r in raw:
             url = normalize_url(r.get("url", ""))
@@ -107,7 +107,7 @@ class LinkedInPostsSearcher:
         if dry_run:
             return []
         query = self.build_query(row)
-        raw = tavily_search(query, api_key)
+        raw = tavily_search(query, api_key, freshness_days=_safe_int(row.get("freshness_days")))
         out: list[RawResult] = []
         for r in raw:
             url = normalize_url(r.get("url", ""))
@@ -133,3 +133,10 @@ class LinkedInPostsSearcher:
         if not normalize_url(url):
             return False
         return bool(_LINKEDIN_POST_PATH.search(url))
+
+
+def _safe_int(v) -> int | None:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None

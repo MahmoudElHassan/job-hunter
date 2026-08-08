@@ -14,7 +14,7 @@ adds a `site:` clause from a built-in map.
 from __future__ import annotations
 
 from .base import Searcher, RawResult
-from .tavily import tavily_search, normalize_url
+from .tavily import tavily_search, normalize_url, canonicalize_url
 from .linkedin import LinkedInJobsSearcher, LinkedInPostsSearcher
 from .upwork import UpworkSearcher
 from .mostaql import MostaqlSearcher
@@ -56,5 +56,6 @@ __all__ = [
     "RawResult",
     "tavily_search",
     "normalize_url",
+    "canonicalize_url",
     "get_searcher",
 ]

@@ -44,7 +44,7 @@ upwork,"ASP.NET Core freelancer",remote,1,true,1,Freelance
 upwork,"C# backend contract",remote,1,true,1,Freelance
 upwork,".NET web API hourly",remote,1,true,1,Freelance
 upwork,".NET consultant",remote,2,true,2,Freelance
-toptal,".NET developer apply",remote,1,true,7,Freelance elite
+toptal,".NET developer apply",remote,1,false,7,Disabled — only category SERPs are public; no reliable job-detail URL pattern
 mostaql,"ASP.NET",arabic,1,true,1,Arabic freelance
 mostaql,"backend C#",arabic,1,true,1,Arabic freelance
 contra,".NET developer freelance",remote,2,true,3,Freelance

@@ -44,6 +44,25 @@ job-hunter/
 - **Telegram is one-way** (notifications). Commands are handled by Mavis in chat, not by the bot directly. (Could be added via Cloudflare Worker if needed.)
 - **Public repo** — your scan data is visible. Don't put personal notes in `Job_Listings.csv` notes field.
 
+## Deploy on Vercel
+
+The static dashboard in `docs/` is deployed as-is via the included `vercel.json`:
+
+1. Go to [vercel.com/new](https://vercel.com/new) and import `MahmoudElHassan/job-hunter`.
+2. Vercel reads `vercel.json` at the repo root — **no framework selection, no build command, no output override needed**.
+3. Click **Deploy**. Every push to `main` redeploys automatically.
+4. Visit your URL:
+   - `/` → `docs/index.html` (dashboard with filters)
+   - `/cover-letter/` → `docs/cover-letter/index.html`
+5. The dashboard still fetches the CSV directly from the GitHub raw URL, so it picks up every scheduled scan automatically — no rebuild required.
+
+If you have the `vercel` CLI authenticated, you can also deploy from the terminal:
+
+```bash
+npm i -g vercel
+vercel --prod
+```
+
 ## License
 
 MIT
