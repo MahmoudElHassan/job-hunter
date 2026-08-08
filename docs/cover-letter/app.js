@@ -158,7 +158,9 @@ async function loadData(forceReload = false) {
   let csvJobs = [];
   let csvError = null;
   try {
-    const resp = await fetch(CSV_URL + (forceReload ? '?t=' + Date.now() : ''), { cache: 'no-store' });
+    // Always cache-bust — raw.githubusercontent.com CDN can serve a stale CSV
+    // for up to ~5 minutes and desync the UI from main.
+    const resp = await fetch(CSV_URL + '?t=' + Date.now(), { cache: 'no-store' });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const text = await resp.text();
     const parsed = parseCSV(text);

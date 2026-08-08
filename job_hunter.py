@@ -30,6 +30,7 @@ import requests
 from dotenv import load_dotenv
 
 from searchers import get_searcher, canonicalize_url
+from searchers.tavily import tavily_plan_limit_hit, reset_tavily_plan_limit_flag
 from searchers.linkedin import LinkedInJobsSearcher, LinkedInPostsSearcher
 from searchers.upwork import UpworkSearcher
 from searchers.mostaql import MostaqlSearcher
@@ -814,6 +815,11 @@ def run_scan(
             print(f"   [dry-run] skipped API call")
         stats["results"] += len(results)
 
+        # Stop burning Actions minutes once Tavily quota is exhausted.
+        if tavily_plan_limit_hit():
+            print("   ⛔ Tavily plan limit hit — stopping remaining queries.")
+            break
+
         for r in results:
             url = r.url
             title = r.title
@@ -1003,6 +1009,7 @@ def main():
         sys.exit("❌ No enabled queries in search_config.csv")
 
     print(f"🚀 Starting scan: {len(queries)} queries")
+    reset_tavily_plan_limit_flag()
     stats = run_scan(queries, tavily_key, tg_token, tg_chat, dry_run=args.dry_run)
     if not args.dry_run:
         write_daily_log(stats, len(queries))
@@ -1010,6 +1017,14 @@ def main():
     print(f"\n📊 Done: {stats['queries']} queries, {stats['results']} results, "
           f"{stats['new']} new (5★: {stats['score_5']}, 4★: {stats['score_4']}), "
           f"{stats['notified']} notifications.")
+
+    # Fail the Actions job when Tavily quota is exhausted so we never treat
+    # an empty scan (and an emptied CSV) as a successful update.
+    if tavily_plan_limit_hit():
+        sys.exit(
+            "❌ Scan aborted: Tavily HTTP 432 plan/key limit. "
+            "CSV left unchanged for prior rows; fix quota before the next run."
+        )
 
 
 if __name__ == "__main__":

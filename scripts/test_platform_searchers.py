@@ -27,7 +27,11 @@ from searchers import (
     canonicalize_url,
     normalize_url,
 )
-from searchers.tavily import tavily_search
+from searchers.tavily import (
+    tavily_search,
+    tavily_plan_limit_hit,
+    reset_tavily_plan_limit_flag,
+)
 import job_hunter
 
 PASS = 0
@@ -683,6 +687,38 @@ li_jobs_fresh = [r for r in rows if (r.get("board") or "") == "linkedin_jobs"
 check("linkedin_jobs freshness_days all = 1",
       all((r.get("freshness_days") or "").strip() == "1" for r in li_jobs_fresh),
       True)
+
+section("15. Tavily HTTP 432 plan-limit abort")
+reset_tavily_plan_limit_flag()
+check("plan limit flag starts False", tavily_plan_limit_hit(), False)
+
+class _Fake432:
+    status_code = 432
+    def raise_for_status(self):
+        raise _req.HTTPError("432", response=self)
+    def json(self):
+        return {"detail": {"error": "plan limit"}}
+
+def _fake_post_432(url, json=None, timeout=None, **kw):
+    return _Fake432()
+
+_orig_post_432 = _req.post
+_req.post = _fake_post_432  # type: ignore
+try:
+    out = tavily_search("test", "fake-key")
+    check("432 → empty results", out, [])
+    check("432 → plan limit flag True", tavily_plan_limit_hit(), True)
+    # Subsequent calls short-circuit without posting again
+    calls = {"n": 0}
+    def _count_post(url, json=None, timeout=None, **kw):
+        calls["n"] += 1
+        return _Fake432()
+    _req.post = _count_post  # type: ignore
+    tavily_search("again", "fake-key")
+    check("after 432, further calls skip network", calls["n"], 0)
+finally:
+    _req.post = _orig_post_432  # type: ignore
+    reset_tavily_plan_limit_flag()
 
 # ---- summary ----
 print()

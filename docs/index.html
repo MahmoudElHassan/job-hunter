@@ -281,6 +281,12 @@ let allRows = [];
 let sortKey = 'score';
 let sortDir = 'desc';
 
+/** Bust raw.githubusercontent.com CDN (max-age=300) so the dashboard
+ *  always matches the live CSV on main — never a stale Total count. */
+function csvFetchUrl() {
+  return CSV_URL + (CSV_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+}
+
 // Canonical board values (lowercase) as written by searchers / run_scan.
 const PRIORITY_BOARDS = [
   'linkedin', 'upwork', 'mostaql',
@@ -331,15 +337,17 @@ function rebuildPlatformOptions(currentSelection) {
 
 async function loadData() {
   try {
-    const resp = await fetch(CSV_URL, { cache: 'no-store' });
+    const resp = await fetch(csvFetchUrl(), { cache: 'no-store' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const text = await resp.text();
     allRows = parseCSV(text);
     document.getElementById('last-updated').textContent = new Date().toLocaleString();
     rebuildPlatformOptions(document.getElementById('filter-platform').value || '');
-    render();
     updateStats();
+    render();
   } catch (e) {
+    allRows = [];
+    updateStats();
     rebuildPlatformOptions('');
     document.getElementById('rows').innerHTML =
       `<tr><td colspan="11" class="empty">⚠️ Failed to load: ${e.message}<br><br>Check the <a href="${CSV_URL}" style="color: var(--accent)">raw CSV</a> or wait for the next scan.</td></tr>`;
@@ -469,8 +477,12 @@ function render() {
     return sortDir === 'desc' ? bv.localeCompare(av) : av.localeCompare(bv);
   });
 
+  let emptyMsg = 'No jobs match your filters.';
+  if (allRows.length === 0) {
+    emptyMsg = 'No listings in Job_Listings.csv yet. Wait for the next scan or check Tavily quota.';
+  }
   const html = rows.length === 0
-    ? '<tr><td colspan="11" class="empty">No jobs match your filters.</td></tr>'
+    ? `<tr><td colspan="11" class="empty">${emptyMsg}</td></tr>`
     : rows.map(r => rowHTML(r)).join('');
   document.getElementById('rows').innerHTML = html;
 }

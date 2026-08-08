@@ -18,6 +18,21 @@ import requests
 TAVILY_URL = "https://api.tavily.com/search"
 MAX_RESULTS_PER_QUERY = 8
 
+# Set when Tavily returns 432 (monthly plan / key usage limit). Callers should
+# abort the scan so we do not silently finish with 0 results and an empty CSV.
+_PLAN_LIMIT_HIT = False
+
+
+def tavily_plan_limit_hit() -> bool:
+    """True if any call this process hit HTTP 432 plan/key limit."""
+    return _PLAN_LIMIT_HIT
+
+
+def reset_tavily_plan_limit_flag() -> None:
+    """Reset the plan-limit flag (tests / new scan process)."""
+    global _PLAN_LIMIT_HIT
+    _PLAN_LIMIT_HIT = False
+
 
 def tavily_search(
     query: str,
@@ -30,6 +45,9 @@ def tavily_search(
     Returns an empty list on error and prints a warning to stderr. The
     searcher wrapper is responsible for converting this to RawResult.
 
+    On HTTP 432 (plan limit exceeded), sets `tavily_plan_limit_hit()` and
+    skips further network calls for the rest of the process.
+
     `freshness_days` maps to Tavily `time_range` per docs:
       <= 1   → "day"
       <= 7   → "week"
@@ -37,6 +55,10 @@ def tavily_search(
       else   → "year"
     `time_range` and `start_date` must not be combined.
     """
+    global _PLAN_LIMIT_HIT
+    if _PLAN_LIMIT_HIT:
+        return []
+
     payload: dict[str, Any] = {
         "api_key": api_key,
         "query": query,
@@ -61,10 +83,28 @@ def tavily_search(
                 payload["time_range"] = "year"
     try:
         resp = requests.post(TAVILY_URL, json=payload, timeout=30)
+        if resp.status_code == 432:
+            _PLAN_LIMIT_HIT = True
+            print(
+                "❌ Tavily plan/key limit exceeded (HTTP 432). "
+                "Upgrade the plan or wait for the quota reset — aborting further queries.",
+                file=sys.stderr,
+            )
+            return []
         resp.raise_for_status()
         data = resp.json()
         return data.get("results", [])
     except requests.RequestException as e:
+        # Some adapters surface 432 only after raise_for_status.
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        if status == 432:
+            _PLAN_LIMIT_HIT = True
+            print(
+                "❌ Tavily plan/key limit exceeded (HTTP 432). "
+                "Upgrade the plan or wait for the quota reset — aborting further queries.",
+                file=sys.stderr,
+            )
+            return []
         print(f"⚠️  Tavily error for '{query[:50]}...': {e}", file=sys.stderr)
         return []
 
