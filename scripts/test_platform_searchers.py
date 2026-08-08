@@ -161,14 +161,17 @@ check("LI Posts: /jobs/view/... → False (not a post path)",
       lp.accept_url("https://www.linkedin.com/jobs/view/12345"),
       False)
 
-# Upwork
+# Upwork — require ~ job id
 up = UpworkSearcher()
 check("Upwork: /jobs/~<hash> → True",
       up.accept_url("https://www.upwork.com/jobs/~0123456789"),
       True)
-check("Upwork: /jobs/<slug> → True",
-      up.accept_url("https://www.upwork.com/jobs/asp-net-developer"),
+check("Upwork: /jobs/Title_~hash → True",
+      up.accept_url("https://www.upwork.com/jobs/ASP-NET-Developer_~01abc23456789"),
       True)
+check("Upwork: /jobs/<slug> without ~ → False (SEO landing)",
+      up.accept_url("https://www.upwork.com/jobs/asp-net-developer"),
+      False)
 check("Upwork: bare /jobs/ → False",
       up.accept_url("https://www.upwork.com/jobs/"),
       False)
@@ -247,7 +250,7 @@ check("Arc.dev: /remote-jobs/backend/ ← category landing → False",
 check("LinkedIn: /jobs/view/<id> accepted",
       LinkedInJobsSearcher().accept_url("https://www.linkedin.com/jobs/view/3829384729"),
       True)
-check("Upwork: /jobs/<slug> accepted",
+check("Upwork: /jobs/~id accepted",
       UpworkSearcher().accept_url("https://www.upwork.com/jobs/~01abc23456789"),
       True)
 check("Mostaql: /projects/<id> accepted",
@@ -502,6 +505,184 @@ if cfg.exists():
               ok, True)
 else:
     print("  (skip — search_config.csv not found)")
+
+# ---- 12. Open-offers-only: LinkedIn body closed check + posts + platforms ----
+section("12. LinkedIn body closed-check (mocked GET)")
+
+class _BodyResp:
+    def __init__(self, status_code, text, url=""):
+        self.status_code = status_code
+        self.url = url
+        self.encoding = "utf-8"
+        self.content = text.encode("utf-8")
+        self.text = text
+
+job_hunter._LINKEDIN_BODY_CHECK_CALLS = 0
+
+def _fake_get_closed(url, headers=None, timeout=None, allow_redirects=None, **kw):
+    return _BodyResp(200, "<html>No longer accepting applications</html>", url)
+
+_orig_get2 = _req.get
+_req.get = _fake_get_closed  # type: ignore
+try:
+    check("linkedin_job_is_open: closed banner → False",
+          job_hunter.linkedin_job_is_open(
+              "https://www.linkedin.com/jobs/view/123456"),
+          False)
+finally:
+    _req.get = _orig_get2  # type: ignore
+
+job_hunter._LINKEDIN_BODY_CHECK_CALLS = 0
+
+def _fake_get_open(url, headers=None, timeout=None, allow_redirects=None, **kw):
+    return _BodyResp(200, "<html>Apply now for this .NET role</html>", url)
+
+_req.get = _fake_get_open  # type: ignore
+try:
+    check("linkedin_job_is_open: open apply page → True",
+          job_hunter.linkedin_job_is_open(
+              "https://www.linkedin.com/jobs/view/123456"),
+          True)
+finally:
+    _req.get = _orig_get2  # type: ignore
+
+job_hunter._LINKEDIN_BODY_CHECK_CALLS = 0
+
+def _fake_get_timeout(url, headers=None, timeout=None, allow_redirects=None, **kw):
+    raise _req.exceptions.Timeout("simulated")
+
+_req.get = _fake_get_timeout  # type: ignore
+try:
+    check("linkedin_job_is_open: timeout → True (fail-open)",
+          job_hunter.linkedin_job_is_open(
+              "https://www.linkedin.com/jobs/view/123456"),
+          True)
+finally:
+    _req.get = _orig_get2  # type: ignore
+
+check("is_closed_posting: 'No longer accepting applications' → True",
+      job_hunter.is_closed_posting("", "No longer accepting applications"),
+      True)
+check("is_closed_posting: applicant limit reached → True",
+      job_hunter.is_closed_posting("", "We've reached the applicant limit for this job"),
+      True)
+
+section("13. LinkedIn posts — comments + hiring signals")
+lp2 = LinkedInPostsSearcher()
+check("LI Posts: commentUrn query → False",
+      lp2.accept_url(
+          "https://www.linkedin.com/posts/acme-activity-123"
+          "?commentUrn=urn%3Ali%3Acomment%3A(activity%3A123%2C456)"),
+      False)
+check("LI Posts: dashCommentUrn → False",
+      lp2.accept_url(
+          "https://www.linkedin.com/posts/acme-activity-123"
+          "?dashCommentUrn=urn:li:comment:(x,y)"),
+      False)
+check("LI Posts: clean /posts/ path → True",
+      lp2.accept_url("https://www.linkedin.com/posts/acme_hiring-activity-999"),
+      True)
+check("LI Posts: 'looking for mentor' without strong hiring → rejected",
+      lp2._is_hiring_post("Career advice", "looking for a mentor in .NET"),
+      False)
+check("LI Posts: #hiring .NET → accepted",
+      lp2._is_hiring_post("We're growing", "We're #hiring a .NET backend engineer"),
+      True)
+check("LI Posts: commenting for reach + no strong phrase → rejected",
+      lp2._is_hiring_post("Bump", "hiring? commenting for reach"),
+      False)
+check("LI Posts: we're hiring → accepted",
+      lp2._is_hiring_post("Join us", "We are hiring ASP.NET developers"),
+      True)
+
+section("14. Cross-platform detail URL tighten")
+gt = GenericBoardSearcher("gulftalent")
+check("GulfTalent: /country/jobs/slug-id → True",
+      gt.accept_url("https://www.gulftalent.com/saudi-arabia/jobs/java-developer-619199"),
+      True)
+check("GulfTalent: ViewList search frame → False",
+      gt.accept_url(
+          "https://www.gulftalent.com/home/canPositions-ViewList-s-frame.php"
+          "?page=35&from_search=1&jobcat=42"),
+      False)
+check("GulfTalent: /people/ profile → False",
+      gt.accept_url("https://www.gulftalent.com/people/arslan-muhammad-qamar-9929959"),
+      False)
+check("GulfTalent: /salaries/ → False",
+      gt.accept_url("https://www.gulftalent.com/uae/salaries/lead-software-engineer"),
+      False)
+check("GulfTalent: /jobs/title/dotnet → False",
+      gt.accept_url("https://www.gulftalent.com/jobs/title/dotnet"),
+      False)
+
+bayt = GenericBoardSearcher("bayt")
+check("Bayt: /ar/job/slug → True",
+      bayt.accept_url("https://www.bayt.com/ar/job/senior-net-developer-12345"),
+      True)
+check("Bayt: /en/jobs/ index → False",
+      bayt.accept_url("https://www.bayt.com/en/jobs/saudi-arabia/"),
+      False)
+
+gg = GenericBoardSearcher("google")
+check("Google ATS: greenhouse job id → True",
+      gg.accept_url("https://job-boards.greenhouse.io/betsson/jobs/8088294"),
+      True)
+check("Google ATS: greenhouse board root → False",
+      gg.accept_url("https://job-boards.greenhouse.io/betsson"),
+      False)
+check("Google ATS: lever uuid → True",
+      gg.accept_url("https://jobs.lever.co/lsa-hr/0f4b1c8c-080d-46f9-8f4e-16b739750580"),
+      True)
+check("Google ATS: lever company root → False",
+      gg.accept_url("https://jobs.lever.co/lsa-hr"),
+      False)
+check("Google ATS: workday with /job/ → True",
+      gg.accept_url(
+          "https://autodesk.wd1.myworkdayjobs.com/en-US/Ext/job/"
+          "Senior-Technical-Consultant_26WD10"),
+      True)
+check("Google ATS: workday portal without /job/ → False",
+      gg.accept_url("https://autodesk.wd1.myworkdayjobs.com/en-US/Ext"),
+      False)
+check("Google ATS: jaabz country index → False",
+      gg.accept_url("https://jaabz.com/jobs/germany"),
+      False)
+
+check("is_likely_job: workday without /job/ → False",
+      job_hunter.is_likely_job(
+          "Software Engineer",
+          "https://autodesk.wd1.myworkdayjobs.com/en-US/Ext",
+          "ASP.NET Core"),
+      False)
+check("is_likely_job: workday with /job/ → True",
+      job_hunter.is_likely_job(
+          "Software Engineer",
+          "https://autodesk.wd1.myworkdayjobs.com/en-US/Ext/job/Foo_123",
+          ""),
+      True)
+check("is_likely_job: gulftalent salaries → False",
+      job_hunter.is_likely_job(
+          "Lead Software Engineer",
+          "https://www.gulftalent.com/uae/salaries/lead-software-engineer",
+          ""),
+      False)
+check("is_likely_job: upwork slug without ~ → False",
+      job_hunter.is_likely_job(
+          "ASP.NET Developer",
+          "https://www.upwork.com/jobs/asp-net-developer",
+          ""),
+      False)
+
+gh = GenericBoardSearcher("github")
+check("GitHub: topics/dotnet → False",
+      gh.accept_url("https://github.com/topics/dotnet"),
+      False)
+
+li_jobs_fresh = [r for r in rows if (r.get("board") or "") == "linkedin_jobs"
+                 and (r.get("enabled") or "").lower() == "true"]
+check("linkedin_jobs freshness_days all = 1",
+      all((r.get("freshness_days") or "").strip() == "1" for r in li_jobs_fresh),
+      True)
 
 # ---- summary ----
 print()

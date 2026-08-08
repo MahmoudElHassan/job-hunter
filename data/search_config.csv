@@ -1,13 +1,13 @@
 board,query,location_filter,priority,enabled,freshness_days,notes
 # === MAIN JOBS — LinkedIn Jobs (dedicated searcher) ===
-linkedin_jobs,".NET Backend Developer remote",remote,1,true,2,Mainstream
-linkedin_jobs,"ASP.NET Core Developer remote sponsorship",remote,1,true,2,
-linkedin_jobs,"C# Backend Engineer Gulf visa",gulf,1,true,2,
-linkedin_jobs,"Full Stack .NET React remote",remote,2,true,3,
-linkedin_jobs,"Software Engineer .NET sponsorship UAE",uae,1,true,2,
-linkedin_jobs,"Senior Software Engineer .NET Europe visa",europe,2,true,3,
-linkedin_jobs,"Backend Developer Fintech .NET remote",remote,2,true,3,
-linkedin_jobs,"Clean Architecture .NET remote",remote,2,true,3,
+linkedin_jobs,.NET Backend Developer remote,remote,1,true,1,Mainstream
+linkedin_jobs,ASP.NET Core Developer remote sponsorship,remote,1,true,1,
+linkedin_jobs,C# Backend Engineer Gulf visa,gulf,1,true,1,
+linkedin_jobs,Full Stack .NET React remote,remote,2,true,1,
+linkedin_jobs,Software Engineer .NET sponsorship UAE,uae,1,true,1,
+linkedin_jobs,Senior Software Engineer .NET Europe visa,europe,2,true,1,
+linkedin_jobs,Backend Developer Fintech .NET remote,remote,2,true,1,
+linkedin_jobs,Clean Architecture .NET remote,remote,2,true,1,
 
 # === LinkedIn Posts (lead source, source_type=post, score cap 4) ===
 linkedin_posts,".NET",remote,2,true,7,Hiring posts

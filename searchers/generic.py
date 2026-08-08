@@ -43,11 +43,23 @@ GENERIC_BOARD_SITE = {
 # marketing pages are rejected explicitly so they can never slip through.
 _DETAIL_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
     "bayt": {
-        "pattern": r"bayt\.com/en/job/[^/?#]+",
+        "pattern": r"bayt\.com/(?:en|ar)/job/[^/?#]+",
         "reject":  (
-            r"bayt\.com/en/jobs",
-            r"bayt\.com/en/(?:companies|search|index|salary|career-advice)",
+            r"bayt\.com/(?:en|ar)/jobs",
+            r"bayt\.com/(?:en|ar)/(?:companies|search|index|salary|career-advice)",
+            r"bayt\.com/(?:[a-z\-]+/)?jobs/",
             r"bayt\.com/$",
+        ),
+    },
+    "gulftalent": {
+        # Real detail: /saudi-arabia/jobs/java-developer-619199
+        "pattern": r"gulftalent\.com/(?:[a-z\-]+/)?jobs/[a-z0-9\-]+-\d+(?:/|$|\?)",
+        "reject":  (
+            r"gulftalent\.com/home/canpositions-viewlist",
+            r"gulftalent\.com/.*/jobs/title/",
+            r"gulftalent\.com/(?:people|talent|companies|employers|salaries)/",
+            r"gulftalent\.com/(?:[a-z\-]+/)?jobs/?$",
+            r"gulftalent\.com/$",
         ),
     },
     "indeed": {
@@ -124,9 +136,10 @@ _DETAIL_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
         # GitHub repo, issue, or bounty — single, specific page.
         "pattern": (
             r"github\.com/[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+"
-            r"(?:/(?:issues|pull|discussions|blob|tree)/[0-9]+|[/?#])?$"
+            r"(?:/(?:issues|pull|discussions|blob|tree)/[0-9a-zA-Z._\-/]+|[/?#])?$"
         ),
         "reject":  (
+            r"github\.com/(?:features|pricing|topics|trending|sponsors|search|orgs|users)/",
             r"github\.com/(?:features|pricing|topics|trending|sponsors|search|orgs|users)/?$",
             r"github\.com/$",
         ),
@@ -140,11 +153,22 @@ _DETAIL_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
         ),
     },
     "google": {
-        # 'google' board rows already include site:... — accept any http(s)
-        # result that isn't a known aggregator shell. Run-scan still passes
-        # the URL through is_likely_job.
-        "pattern": r"https?://[^/?#]+/[^?#]+",
+        # ATS detail pages only (greenhouse / lever / workday / ashby).
+        # Positive pattern is the gate; board/company roots fail it.
+        "pattern": (
+            r"(?:"
+            r"(?:job-boards|boards)\.greenhouse\.io/[^/]+/jobs/\d+"
+            r"|jobs\.lever\.co/[^/]+/[0-9a-f\-]{20,}"
+            r"|[a-z0-9\-.]+\.myworkdayjobs\.com/.*/job/"
+            r"|jobs\.ashbyhq\.com/[^/]+/[0-9a-f\-]{8,}"
+            r")"
+        ),
         "reject":  (
+            r"(?:job-boards|boards)\.greenhouse\.io/[^/]+/?$",
+            r"jobs\.lever\.co/[^/]+/?$",
+            r"jobs\.ashbyhq\.com/[^/]+/?$",
+            r"jaabz\.com/",
+            r"blog\.workday\.com/",
             r"toptal\.com/freelance-jobs/",
             r"jooble\.org/jobs",
             r"simplyhired\.com/search\?q=",

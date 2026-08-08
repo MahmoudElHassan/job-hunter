@@ -24,7 +24,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -201,23 +201,47 @@ def is_likely_job(title: str, url: str, content: str) -> bool:
 
     # ---- Allow list (high confidence ATS job pages) — checked first so a
     # ---- messy title on a known-good URL still passes.
+    # High-confidence detail shapes only — board/company roots must NOT
+    # short-circuit (especially Workday portals without /job/).
     allow_hosts = (
         "linkedin.com/jobs/view/",
-        "job-boards.greenhouse.io/",
-        "boards.greenhouse.io/",
-        "jobs.lever.co/",
-        "jobs.ashbyhq.com/",
-        "myworkdayjobs.com/",  # all *.myworkdayjobs.com host variants
-        "bayt.com/en/job/",
-        "gulftalent.com/job/",
         "wellfound.com/jobs/",
-        "upwork.com/jobs/",
     )
     if any(h in url_l for h in allow_hosts):
         return True
-    # Workday ATS specifically requires /job/ in the path (e.g. myworkdayjobs.com/en-US/job/...)
+    # Greenhouse / Lever / Ashby: require a job id segment, not board root.
+    if re.search(r"(?:job-boards|boards)\.greenhouse\.io/[^/]+/jobs/\d+", url_l):
+        return True
+    if re.search(r"jobs\.lever\.co/[^/]+/[0-9a-f\-]{20,}", url_l):
+        return True
+    if re.search(r"jobs\.ashbyhq\.com/[^/]+/[0-9a-f\-]{8,}", url_l):
+        return True
+    # Workday ATS: must contain /job/ in the path.
     if "myworkdayjobs.com" in url_l and "/job/" in url_l:
         return True
+    # Bayt detail (en|ar locale).
+    if re.search(r"bayt\.com/(?:en|ar)/job/[^/?#]+", url_l):
+        return True
+    # GulfTalent: /{country}/jobs/{slug}-{numericId}
+    if re.search(r"gulftalent\.com/(?:[a-z\-]+/)?jobs/[a-z0-9\-]+-\d+", url_l):
+        return True
+    # Upwork detail must include ~ job id.
+    if re.search(r"upwork\.com/jobs/[^/?#]*~\w+", url_l):
+        return True
+
+    # ---- Hard rejects for known ATS/board shells (before default allow) ----
+    if "myworkdayjobs.com" in url_l and "/job/" not in url_l:
+        return False
+    if re.search(r"upwork\.com/jobs/", url_l) and "~" not in url_l:
+        return False
+    if re.search(r"(?:job-boards|boards)\.greenhouse\.io/[^/]+/?$", url_l):
+        return False
+    if re.search(r"jobs\.lever\.co/[^/]+/?$", url_l):
+        return False
+    if "gulftalent.com" in url_l and not re.search(
+        r"gulftalent\.com/(?:[a-z\-]+/)?jobs/[a-z0-9\-]+-\d+", url_l
+    ):
+        return False
 
     # ---- Deny list: URL hosts / paths (high confidence) ----
     deny_hosts = (
@@ -354,10 +378,10 @@ def is_likely_job(title: str, url: str, content: str) -> bool:
     # Title is bare GitHub repo name (e.g. "MetacoSA/NBitcoin: Comprehensive ...")
     if re.match(r"^[a-z0-9_-]+/[a-z0-9_-]+:", title_l):
         return False
-    # Salary / overview pages (glassdoor, levels.fyi) — not jobs
-    if re.search(r"/(Salaries|salary|compensation|overview)/?", url_l):
+    # Salary / overview pages (glassdoor, levels.fyi, gulftalent) — not jobs
+    if re.search(r"/(salaries|salary|compensation|overview)/?", url_l, re.IGNORECASE):
         return False
-    if "salary-SRCH" in url_l or "compensation" in url_l:
+    if "salary-srch" in url_l or "compensation" in url_l:
         return False
     # URL contains URL-encoded space (+) — almost always a search query
     if "+" in url_l and any(kw in url_l for kw in ("jobs", "developer", "engineer", "net")):
@@ -506,6 +530,9 @@ def is_closed_posting(title: str, content: str) -> bool:
         "posting expired",
         "this listing has expired",
         "not accepting applications",
+        "applicant limit reached",
+        "we've reached the applicant limit",
+        "we have reached the applicant limit",
         "تم إغلاق",
         "تم اغلاق",
         "انتهى التقديم",
@@ -520,6 +547,59 @@ def is_closed_posting(title: str, content: str) -> bool:
 # Cap live HTTP checks per scan so we stay under Actions timeout-minutes.
 LIVE_CHECK_MAX_PER_SCAN = 20
 _LIVE_CHECK_CALLS = 0
+
+# Separate budget for LinkedIn job body fetches (closed-banner scan).
+LINKEDIN_BODY_CHECK_MAX_PER_SCAN = 40
+_LINKEDIN_BODY_CHECK_CALLS = 0
+_FETCH_PAGE_MAX_BYTES = 200_000
+
+
+def fetch_page_text(url: str, *, timeout: float = 8.0, max_bytes: int = _FETCH_PAGE_MAX_BYTES) -> Optional[str]:
+    """GET a page and return truncated text, or None on network/HTTP failure.
+
+    Used for LinkedIn closed-banner detection. Does not raise.
+    """
+    if not url:
+        return None
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (compatible; JobHunterBot/1.0; +https://github.com/MahmoudElHassan/job-hunter)"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+        if resp.status_code >= 400:
+            return None
+        # Prefer resp.text but cap size to keep Actions memory/time sane.
+        raw = resp.content[:max_bytes]
+        try:
+            return raw.decode(resp.encoding or "utf-8", errors="replace")
+        except Exception:
+            return raw.decode("utf-8", errors="replace")
+    except requests.RequestException:
+        return None
+
+
+def linkedin_job_is_open(url: str, *, timeout: float = 8.0) -> bool:
+    """Return False if a LinkedIn /jobs/view/ page shows a closed banner.
+
+    Fail-open on network errors or when the per-scan body-check budget is
+    exhausted (return True so we do not drop potentially good jobs).
+    """
+    global _LINKEDIN_BODY_CHECK_CALLS
+    if not url or "linkedin.com/jobs/view/" not in url.lower():
+        return True
+    if _LINKEDIN_BODY_CHECK_CALLS >= LINKEDIN_BODY_CHECK_MAX_PER_SCAN:
+        print(f"   linkedin body-check cap reached; keeping: {url}")
+        return True
+    _LINKEDIN_BODY_CHECK_CALLS += 1
+    body = fetch_page_text(url, timeout=timeout)
+    if body is None:
+        return True  # fail-open
+    if is_closed_posting("", body):
+        return False
+    return True
 
 # Path fragments that scream "category / search / closed" landing.
 _CLOSED_PATH_HINTS = (
@@ -786,11 +866,21 @@ def run_scan(
             if score <= 2:
                 continue  # don't pollute the CSV with low-quality
 
-            # Live HEAD/GET check for high-scoring results only. Drops on
-            # 4xx/5xx and on clearly-closed redirect targets. Network /
-            # timeout errors fail-open so we don't lose jobs to flaky
-            # connectivity. Capped by LIVE_CHECK_MAX_PER_SCAN.
-            if score >= 4:
+            # LinkedIn job pages: body-scan for "No longer accepting
+            # applications" (absent from Tavily snippets). Prefer this over
+            # status-only live check for linkedin/main. Score ≥3.
+            is_linkedin_job = (
+                (platform_board or "").lower() in ("linkedin", "linkedin_jobs")
+                and source == "main"
+                and "linkedin.com/jobs/view/" in url.lower()
+            )
+            if is_linkedin_job and score >= 3:
+                if not linkedin_job_is_open(url):
+                    print(f"   skipped closed LinkedIn job (body): {url}")
+                    continue
+            elif score >= 4:
+                # Live HEAD/GET for non-LinkedIn (or LinkedIn posts) high scores.
+                # Drops on 4xx/5xx / closed-path redirects. Fail-open on network.
                 if not url_looks_alive(url):
                     print(f"   skipped dead/closed URL: {url}")
                     continue

@@ -8,10 +8,10 @@ from .base import RawResult
 from .tavily import normalize_url, tavily_search
 
 
-# Detail URL: upwork.com/jobs/~<hash> (canonical) or upwork.com/jobs/<slug>
-# with a real path segment. Reject bare /jobs/ and /freelance-jobs/ categories.
+# Detail URL must include the ~ job id (canonical or Title_~hash).
+# SEO landings like /jobs/ASP-NET-Developer/ without ~ are rejected.
 _UPWORK_JOB_DETAIL = re.compile(
-    r"upwork\.com/jobs/(?:~[a-z0-9]+|[a-z0-9][\w\-]{3,})",
+    r"upwork\.com/jobs/[^/?#]*~[a-z0-9]+",
     re.IGNORECASE,
 )
 _UPWORK_CATEGORY = re.compile(r"upwork\.com/freelance-jobs/", re.IGNORECASE)

@@ -6,11 +6,13 @@ company about pages, aggregate -jobs landing pages).
 
 LinkedInPostsSearcher is a lead source: scoped to `site:linkedin.com/posts`
 plus hiring-signal keywords. The CSV row gets `source_type=post` and a
-score cap in run_scan, so posts never become 5★ applies.
+score cap in run_scan, so posts never become 5★ applies. Comment deep-links
+and weak "looking for" engagement noise are rejected.
 """
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse, parse_qs, unquote
 from .base import RawResult
 from .tavily import normalize_url, tavily_search
 
@@ -33,12 +35,34 @@ _LINKEDIN_COMPANY_ABOUT = re.compile(
     re.IGNORECASE,
 )
 
-# Hiring-signal keywords for posts (lowercase).
+# Comment / reply deep-link markers in query or path.
+_COMMENT_MARKERS = (
+    "commenturn",
+    "dashcommenturn",
+    "replyurn",
+    "commentid",
+    "/comments/",
+)
+
+# Strong hiring-signal keywords for posts (lowercase). Bare "looking for"
+# is intentionally excluded — it matches mentor/advice comments.
 _HIRING_SIGNALS = (
-    "hiring", "we're hiring", "were hiring", "looking for",
-    "open role", "open position", "we are hiring", "join our team",
+    "hiring", "we're hiring", "were hiring", "we are hiring",
+    "open role", "open position", "join our team",
     "job opening", "vacancy", "now hiring", "#hiring",
-    "مطلوب", "توظيف", "نبحث عن", "فرصة عمل", "وظيفة",
+    "مطلوب", "توظيف", "نبحث عن", "فرصة عمل",
+)
+
+# Engagement / comment noise that is not a hiring post.
+_ENGAGEMENT_NOISE = (
+    "commenting for",
+    "commenting to",
+    "interested",
+    "dm me for referral",
+    "dm me for",
+    "please refer",
+    "for reach",
+    "following for",
 )
 
 
@@ -95,12 +119,15 @@ class LinkedInPostsSearcher:
         q = (row.get("query") or "").strip()
         if "site:" in q.lower():
             return q
-        # Force the hiring-signal keywords unless the config already has them.
+        # Force strong hiring-signal keywords unless the config already has them.
         ql = q.lower()
-        if any(sig in ql for sig in ("hiring", "we're hiring", "looking for", "مطلوب", "توظيف")):
+        if any(sig in ql for sig in ("hiring", "we're hiring", "#hiring", "مطلوب", "توظيف", "نبحث عن")):
             base = q
         else:
-            base = f"({q}) (hiring OR \"we're hiring\" OR \"looking for\" OR #hiring OR مطلوب OR توظيف)"
+            base = (
+                f"({q}) (hiring OR \"we're hiring\" OR \"we are hiring\" "
+                f"OR #hiring OR \"open role\" OR مطلوب OR توظيف OR \"نبحث عن\")"
+            )
         return f"site:linkedin.com/posts {base}".strip()
 
     def search(self, row: dict, api_key: str, *, dry_run: bool = False) -> list[RawResult]:
@@ -115,10 +142,7 @@ class LinkedInPostsSearcher:
                 continue
             title = r.get("title", "")
             content = r.get("content", "")
-            # Tavily already filters by our query keywords, but add a
-            # belt-and-suspenders check on the actual content.
-            combined = (title + " " + content).lower()
-            if not any(sig in combined for sig in _HIRING_SIGNALS):
+            if not self._is_hiring_post(title, content):
                 continue
             out.append(RawResult(
                 title=title,
@@ -132,7 +156,56 @@ class LinkedInPostsSearcher:
     def accept_url(self, url: str) -> bool:
         if not normalize_url(url):
             return False
+        if self._is_comment_deeplink(url):
+            return False
         return bool(_LINKEDIN_POST_PATH.search(url))
+
+    @staticmethod
+    def _is_comment_deeplink(url: str) -> bool:
+        """True if URL points at a comment/reply rather than the post itself."""
+        url_l = (url or "").lower()
+        if any(m in url_l for m in _COMMENT_MARKERS):
+            return True
+        try:
+            parsed = urlparse(url)
+            # Decode query values (URN params are often percent-encoded).
+            qs = parse_qs(parsed.query, keep_blank_values=True)
+            for key, vals in qs.items():
+                kl = key.lower()
+                if any(m in kl for m in ("comment", "reply")):
+                    return True
+                for v in vals:
+                    vl = unquote(v or "").lower()
+                    if any(m in vl for m in _COMMENT_MARKERS):
+                        return True
+            frag = unquote(parsed.fragment or "").lower()
+            if any(m in frag for m in _COMMENT_MARKERS):
+                return True
+        except Exception:
+            pass
+        return False
+
+    @classmethod
+    def _is_hiring_post(cls, title: str, content: str) -> bool:
+        """Require a strong hiring signal; drop engagement-only noise."""
+        combined = f"{title or ''} {content or ''}".lower()
+        has_signal = any(sig in combined for sig in _HIRING_SIGNALS)
+        if not has_signal:
+            return False
+        # If the text is dominated by engagement noise and lacks an explicit
+        # company-style hiring phrase beyond a weak hit, drop it.
+        noise_hits = sum(1 for n in _ENGAGEMENT_NOISE if n in combined)
+        strong = any(
+            s in combined
+            for s in (
+                "we're hiring", "we are hiring", "were hiring",
+                "#hiring", "now hiring", "open role", "open position",
+                "job opening", "join our team", "مطلوب", "توظيف", "نبحث عن",
+            )
+        )
+        if noise_hits >= 1 and not strong:
+            return False
+        return True
 
 
 def _safe_int(v) -> int | None:
