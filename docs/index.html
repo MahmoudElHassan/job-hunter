@@ -276,13 +276,14 @@
 </footer>
 
 <script>
-const CSV_URL = 'https://raw.githubusercontent.com/MahmoudElHassan/job-hunter/main/data/Job_Listings.csv';
+// jsDelivr tracks @main more reliably than raw.githubusercontent.com, whose
+// Fastly edge often serves a stale CSV for minutes (and ignores ?t= busting).
+const CSV_URL = 'https://cdn.jsdelivr.net/gh/MahmoudElHassan/job-hunter@main/data/Job_Listings.csv';
 let allRows = [];
 let sortKey = 'score';
 let sortDir = 'desc';
 
-/** Bust raw.githubusercontent.com CDN (max-age=300) so the dashboard
- *  always matches the live CSV on main — never a stale Total count. */
+/** Cache-bust so Total always matches the latest CSV on main. */
 function csvFetchUrl() {
   return CSV_URL + (CSV_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
 }

@@ -15,7 +15,8 @@ const PROFILE = {
   finTech: "AWS payment gateway integration (transactional integrity, retries, reconciliation)",
 };
 
-const CSV_URL = 'https://raw.githubusercontent.com/MahmoudElHassan/job-hunter/main/data/Job_Listings.csv';
+// jsDelivr @main — raw.githubusercontent.com CDN often serves a stale CSV.
+const CSV_URL = 'https://cdn.jsdelivr.net/gh/MahmoudElHassan/job-hunter@main/data/Job_Listings.csv';
 
 // Canonical board labels (option values stay lowercase as written to CSV).
 const PRIORITY_BOARDS = [
