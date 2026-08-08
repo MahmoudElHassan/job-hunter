@@ -46,15 +46,19 @@ job-hunter/
 
 ## Deploy on Vercel
 
-The static dashboard in `docs/` is deployed as-is via the included `vercel.json`:
+The static dashboard in `docs/` is deployed as-is via the included `vercel.json`
+(`framework: null` + `outputDirectory: docs` so Vercel does **not** treat the
+repo as a Python app because of `requirements.txt` / `job_hunter.py`):
 
 1. Go to [vercel.com/new](https://vercel.com/new) and import `MahmoudElHassan/job-hunter`.
-2. Vercel reads `vercel.json` at the repo root — **no framework selection, no build command, no output override needed**.
+2. Leave Root Directory as `.` (repo root). Framework Preset should show **Other** from `vercel.json`.
 3. Click **Deploy**. Every push to `main` redeploys automatically.
 4. Visit your URL:
    - `/` → `docs/index.html` (dashboard with filters)
    - `/cover-letter/` → `docs/cover-letter/index.html`
 5. The dashboard still fetches the CSV directly from the GitHub raw URL, so it picks up every scheduled scan automatically — no rebuild required.
+
+If an old project still has Framework = Python in Vercel Project Settings, set it to **Other** (or clear Override) and redeploy.
 
 If you have the `vercel` CLI authenticated, you can also deploy from the terminal:
 
