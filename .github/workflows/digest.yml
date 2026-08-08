@@ -2,10 +2,11 @@ name: Job Hunter — Daily Digest
 
 # Every evening at 18:00 UTC (= 21:00 Makkah local) — daily summary to Telegram.
 # Lists the day's finds + pipeline status, even if scan added nothing.
+# Runs every day (incl. Fri–Sat).
 
 on:
   schedule:
-    - cron: "0 18 * * 0-4"   # Sun–Thu
+    - cron: "0 18 * * *"     # Every day
   workflow_dispatch:
 
 permissions:

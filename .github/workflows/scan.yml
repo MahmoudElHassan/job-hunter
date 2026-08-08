@@ -1,12 +1,12 @@
 name: Job Hunter — Scheduled Scan
 
-# Runs the scanner 4× per day during business hours (Makkah time, Sun–Thu).
+# Runs the scanner 4× per day every day (incl. Fri–Sat), Makkah local times.
 # Cron uses UTC; 05:00 UTC = 08:00 Asia/Riyadh (UTC+3, no DST in KSA).
 # 05, 09, 13, 17 UTC = 08, 12, 16, 20 Makkah local.
 
 on:
   schedule:
-    - cron: "0 5,9,13,17 * * 0-4"   # Sun–Thu, 4×/day
+    - cron: "0 5,9,13,17 * * *"     # Every day, 4×/day
   workflow_dispatch:                  # Manual trigger from Actions tab
     inputs:
       mode:

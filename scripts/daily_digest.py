@@ -98,7 +98,7 @@ def format_digest(stats: dict) -> str:
         lines.append("😴 No new matches today. The market is quiet — keep applying to the warm leads.")
 
     lines.append("")
-    lines.append("_Next scan: 08:00 Makkah (tomorrow, Sun–Thu)_")
+    lines.append("_Next scan: 08:00 Makkah (tomorrow)_")
     return "\n".join(lines)
 
 
