@@ -53,10 +53,12 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          if [ "${{ inputs.mode }}" = "custom" ] && [ -n "${{ inputs.query }}" ]; then
-            python job_hunter.py --query "${{ inputs.query }}"
-          elif [ "${{ inputs.mode }}" = "quick" ]; then
+          # workflow_dispatch modes: full (default) | quick
+          # Scheduled runs have empty inputs.mode → full scan.
+          if [ "${{ inputs.mode }}" = "quick" ]; then
             python job_hunter.py --quick
+          elif [ -n "${{ inputs.query }}" ]; then
+            python job_hunter.py --query "${{ inputs.query }}"
           else
             python job_hunter.py
           fi

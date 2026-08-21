@@ -1,6 +1,6 @@
-name: Job Hunter — Daily Digest
+name: Job Hunter — Scan-Day Digest
 
-# Every Sunday/Tuesday/Thursday at 18:00 UTC (= 21:00 Makkah local) — digest to Telegram.
+# Sunday/Tuesday/Thursday at 18:00 UTC (= 21:00 Makkah local) — digest to Telegram.
 # Lists the day's finds + pipeline status, even if scan added nothing.
 # Aligned with scan.yml so off-days do not get empty digests.
 
