@@ -1,6 +1,6 @@
 # Job Hunter — Mahmoud ElHassan
 
-> Personal AI job search worker. Scans job boards + freelance platforms 4×/day, scores matches, notifies via Telegram, and tailors CVs on demand. **100% free, runs on GitHub Actions.**
+> Personal AI job search worker. Scans job boards + freelance platforms 3×/week (Sun/Tue/Thu at 17:00 Makkah), scores matches, notifies via Telegram, and tailors CVs on demand. **100% free, runs on GitHub Actions.**
 
 ## What it does
 
@@ -19,8 +19,8 @@ job-hunter/
 ├── requirements.txt
 ├── .env.example                  # Secrets template
 ├── .github/workflows/
-│   ├── scan.yml                  # 4×/day scan cron
-│   └── digest.yml                # Daily digest at 21:00 Makkah
+│   ├── scan.yml                  # 3×/week scan cron (Sun/Tue/Thu 17:00 Makkah)
+│   └── digest.yml                # Digest at 21:00 Makkah on scan days
 ├── scripts/
 │   ├── daily_digest.py           # Telegram digest generator
 │   └── push_cv_to_portfolio.sh   # Manual CV push
