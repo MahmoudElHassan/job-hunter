@@ -500,6 +500,53 @@ def score_result(title: str, url: str, content: str) -> tuple[int, str]:
     return (1, source)
 
 
+_STACK_CORE = (".net", "asp.net", "c#", "c sharp")
+_FREELANCE_BOARDS = {
+    "upwork", "mostaql", "contra", "braintrust", "peopleperhour", "toptal",
+}
+
+
+def has_stack_signal(title: str, content: str, url: str = "") -> bool:
+    """True if title/snippet/url mentions .NET/C# or a PROFILE stack keyword."""
+    text = f"{title} {content} {url}".lower()
+    if any(kw in text for kw in _STACK_CORE):
+        return True
+    return any(kw in text for kw in PROFILE["tech_stack_keywords"])
+
+
+def fits_remote_or_visa(
+    title: str,
+    content: str,
+    *,
+    location_filter: str = "",
+    query_text: str = "",
+    board: str = "",
+    source_type: str = "",
+) -> bool:
+    """Keep remote / freelance / visa-friendly; drop onsite-only with no visa."""
+    text = f"{title} {content} {query_text}".lower()
+    loc = (location_filter or "").lower().strip()
+    board_l = (board or "").lower().strip()
+    source_l = (source_type or "").lower().strip()
+
+    if loc in ("remote", "arabic") or "remote" in loc:
+        return True
+    if board_l in _FREELANCE_BOARDS or source_l == "freelance":
+        return True
+    if "remote" in text:
+        return True
+    if any(kw in text for kw in PROFILE["sponsorship_keywords"]):
+        return True
+    # Query/location often encodes visa intent ("Gulf visa", "sponsorship UAE").
+    if any(tok in text for tok in ("visa", "sponsorship", "sponsor")):
+        return True
+    if loc in ("gulf", "uae", "ksa", "europe") and any(
+        tok in text for tok in ("visa", "sponsorship", "sponsor", "relocation")
+    ):
+        return True
+    return False
+
+
 def is_closed_posting(title: str, content: str) -> bool:
     """Return True if the title/content strongly indicates the posting is closed.
 
@@ -534,6 +581,13 @@ def is_closed_posting(title: str, content: str) -> bool:
         "applicant limit reached",
         "we've reached the applicant limit",
         "we have reached the applicant limit",
+        "this job is no longer accepting applications",
+        "job posting is no longer available",
+        "sorry, this job is no longer available",
+        "this opportunity has been filled",
+        "role has been filled",
+        "🎈 closed",
+        "status: closed",
         "تم إغلاق",
         "تم اغلاق",
         "انتهى التقديم",
@@ -546,7 +600,7 @@ def is_closed_posting(title: str, content: str) -> bool:
 
 
 # Cap live HTTP checks per scan so we stay under Actions timeout-minutes.
-LIVE_CHECK_MAX_PER_SCAN = 20
+LIVE_CHECK_MAX_PER_SCAN = 40
 _LIVE_CHECK_CALLS = 0
 
 # Separate budget for LinkedIn job body fetches (closed-banner scan).
@@ -583,24 +637,25 @@ def fetch_page_text(url: str, *, timeout: float = 8.0, max_bytes: int = _FETCH_P
 
 
 def linkedin_job_is_open(url: str, *, timeout: float = 8.0) -> bool:
-    """Return False if a LinkedIn /jobs/view/ page shows a closed banner.
+    """Return False unless a LinkedIn /jobs/view/ page is confirmed open.
 
-    Fail-open on network errors or when the per-scan body-check budget is
-    exhausted (return True so we do not drop potentially good jobs).
+    Fail-closed: drop on closed banner, fetch failure, or exhausted budget.
     """
     global _LINKEDIN_BODY_CHECK_CALLS
     if not url or "linkedin.com/jobs/view/" not in url.lower():
         return True
     if _LINKEDIN_BODY_CHECK_CALLS >= LINKEDIN_BODY_CHECK_MAX_PER_SCAN:
-        print(f"   linkedin body-check cap reached; keeping: {url}")
-        return True
+        print(f"   linkedin body-check cap reached; dropping: {url}")
+        return False
     _LINKEDIN_BODY_CHECK_CALLS += 1
     body = fetch_page_text(url, timeout=timeout)
     if body is None:
-        return True  # fail-open
+        print(f"   linkedin body fetch failed (fail-closed): {url}")
+        return False
     if is_closed_posting("", body):
         return False
     return True
+
 
 # Path fragments that scream "category / search / closed" landing.
 _CLOSED_PATH_HINTS = (
@@ -613,6 +668,53 @@ _CLOSED_PATH_HINTS = (
     "/categories/",
     "/archive/",
 )
+
+_OPEN_CHECK_BOARDS = {
+    "bayt", "gulftalent", "indeed",
+    "upwork", "mostaql", "contra", "braintrust", "peopleperhour",
+}
+
+
+def page_looks_open(url: str, *, timeout: float = 8.0) -> bool:
+    """Fail-closed GET for Gulf/freelance job pages.
+
+    Drop on 404/410, closed-path redirect, closed-banner HTML, fetch failure,
+    or exhausted live-check budget. HTTP 200 with no closed signal keeps.
+    """
+    global _LIVE_CHECK_CALLS
+    if not url:
+        return False
+    if _LIVE_CHECK_CALLS >= LIVE_CHECK_MAX_PER_SCAN:
+        print(f"   live-check cap reached; dropping: {url}")
+        return False
+    _LIVE_CHECK_CALLS += 1
+    url_l = url.lower()
+    if any(hint in url_l for hint in _CLOSED_PATH_HINTS):
+        return False
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (compatible; JobHunterBot/1.0; +https://github.com/MahmoudElHassan/job-hunter)"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+        if resp.status_code in (404, 410) or resp.status_code >= 400:
+            return False
+        final = (resp.url or url).lower()
+        if any(hint in final for hint in _CLOSED_PATH_HINTS):
+            return False
+        raw = resp.content[:_FETCH_PAGE_MAX_BYTES]
+        try:
+            body = raw.decode(resp.encoding or "utf-8", errors="replace")
+        except Exception:
+            body = raw.decode("utf-8", errors="replace")
+        if is_closed_posting("", body):
+            return False
+        return True
+    except requests.RequestException:
+        print(f"   page open-check failed (fail-closed): {url}")
+        return False
 
 
 def url_looks_alive(url: str, *, timeout: float = 5.0) -> bool:
@@ -872,34 +974,77 @@ def run_scan(
             if score <= 2:
                 continue  # don't pollute the CSV with low-quality
 
+            if not has_stack_signal(title, content, url):
+                print(f"   skipped no stack fit: {url}")
+                continue
+            if not fits_remote_or_visa(
+                title,
+                content,
+                location_filter=location_filter,
+                query_text=query_text,
+                board=platform_board or "",
+                source_type=source,
+            ):
+                print(f"   skipped no remote/visa: {url}")
+                continue
+
             # LinkedIn job pages: body-scan for "No longer accepting
-            # applications" (absent from Tavily snippets). Prefer this over
-            # status-only live check for linkedin/main. Score ≥3.
+            # applications" (absent from Tavily snippets). Fail-closed.
             is_linkedin_job = (
                 (platform_board or "").lower() in ("linkedin", "linkedin_jobs")
                 and source == "main"
                 and "linkedin.com/jobs/view/" in url.lower()
             )
+            board_key = (platform_board or "").lower().replace("_jobs", "").replace("_posts", "")
+            if board_key == "linkedin_jobs":
+                board_key = "linkedin"
+            needs_page_open = board_key in _OPEN_CHECK_BOARDS or any(
+                b in (url or "").lower() for b in (
+                    "bayt.com", "gulftalent.com", "indeed.com",
+                    "upwork.com", "mostaql.com", "contra.com",
+                    "braintrust.dev", "peopleperhour.com",
+                )
+            )
+
             if is_linkedin_job and score >= 3:
                 if not linkedin_job_is_open(url):
                     print(f"   skipped closed LinkedIn job (body): {url}")
                     continue
+            elif source == "post":
+                # LinkedIn posts: snippet closed-phrases only (login walls
+                # would fail-closed almost everything).
+                pass
+            elif needs_page_open and score >= 3:
+                if not page_looks_open(url):
+                    print(f"   skipped closed/unreachable page: {url}")
+                    continue
             elif score >= 4:
-                # Live HEAD/GET for non-LinkedIn (or LinkedIn posts) high scores.
-                # Drops on 4xx/5xx / closed-path redirects. Fail-open on network.
+                # Other high scores: lightweight alive check (still fail-open
+                # for unknown boards — page_looks_open covers primary boards).
                 if not url_looks_alive(url):
                     print(f"   skipped dead/closed URL: {url}")
                     continue
 
             # Determine remote/sponsorship flags
-            text_lower = f"{title} {content}".lower()
-            remote = "yes" if "remote" in text_lower else "unknown"
-            sponsorship = "yes" if any(kw in text_lower for kw in PROFILE["sponsorship_keywords"]) else "unknown"
+            text_lower = f"{title} {content} {query_text}".lower()
+            remote = "yes" if (
+                "remote" in text_lower
+                or (location_filter or "").lower().strip() == "remote"
+                or source == "freelance"
+                or board_key in _FREELANCE_BOARDS
+            ) else "unknown"
+            sponsorship = "yes" if any(
+                kw in text_lower for kw in PROFILE["sponsorship_keywords"]
+            ) or any(tok in text_lower for tok in ("visa", "sponsorship")) else "unknown"
 
             # Determine stack match keywords
             stack_match = ", ".join([
                 kw for kw in PROFILE["tech_stack_keywords"] if kw in text_lower
             ][:5])
+            if not stack_match:
+                stack_match = ", ".join(
+                    [kw for kw in _STACK_CORE if kw in text_lower][:5]
+                )
 
             # Board name: prefer the searcher's tagged board; fall back
             # to URL keyword scan if still unknown.
@@ -949,13 +1094,13 @@ def run_scan(
             stats["new"] += 1
             if score == 5:
                 stats["score_5"] += 1
-                if len(notified_buffer) < MAX_NOTIFICATIONS_PER_SCAN:
-                    notified_buffer.append(row)
+                notified_buffer.append(row)
             elif score == 4:
                 stats["score_4"] += 1
-                if len(notified_buffer) < MAX_NOTIFICATIONS_PER_SCAN:
-                    notified_buffer.append(row)
-    # Send notifications
+                notified_buffer.append(row)
+    # Notify highest scores first (5★ before 4★), then cap at Top 5.
+    notified_buffer.sort(key=lambda r: int(r.get("score") or 0), reverse=True)
+    notified_buffer = notified_buffer[:MAX_NOTIFICATIONS_PER_SCAN]
     if notified_buffer and not dry_run:
         header = f"🎯 *Job Hunter — {stats['new']} new match{'es' if stats['new'] != 1 else ''}*\n"
         body = "\n".join(format_telegram(item) for item in notified_buffer)

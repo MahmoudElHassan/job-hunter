@@ -17,6 +17,12 @@ const PROFILE = {
 
 // jsDelivr @main — raw.githubusercontent.com CDN often serves a stale CSV.
 const CSV_URL = 'https://cdn.jsdelivr.net/gh/MahmoudElHassan/job-hunter@main/data/Job_Listings.csv';
+// Vercel serverless delete endpoint (set DELETE_KEY + GITHUB_TOKEN on Vercel).
+// Override via localStorage key cl_delete_api if your project URL differs.
+const DELETE_API_URL =
+  localStorage.getItem('cl_delete_api') ||
+  'https://job-hunter.vercel.app/api/delete-listing';
+const DELETE_KEY_STORAGE = 'cl_delete_key';
 
 // Canonical board labels (option values stay lowercase as written to CSV).
 const PRIORITY_BOARDS = [
@@ -452,6 +458,7 @@ function cardHTML(v) {
         ${isGenerated ? '<button class="btn-secondary" onclick="markPending(\'' + escapeHtml(v.id) + '\')">↩ Reset</button>' : ''}
         <button class="btn-secondary" onclick="copyJobId('${escapeHtml(v.id)}')">📋 Copy ID</button>
         ${v.url ? `<a class="btn-secondary" href="${escapeHtml(v.url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:inline-flex;align-items:center;">🔗 Open</a>` : ''}
+        <button class="btn-danger" onclick="deleteListing('${escapeHtml(v.id)}')">🗑 Delete</button>
       </div>
 
       <div class="cover-letter ${isGenerated ? 'show' : ''}" id="cl-${escapeHtml(v.id)}">
@@ -533,6 +540,65 @@ function copyJobId(id) {
     }).catch(() => fallbackCopy(id, 'Job ID'));
   } else {
     fallbackCopy(id, 'Job ID');
+  }
+}
+
+function getDeleteKey() {
+  let key = sessionStorage.getItem(DELETE_KEY_STORAGE) || '';
+  if (key) return key;
+  key = prompt('Enter delete key (DELETE_KEY from Vercel). Leave blank to cancel.') || '';
+  key = key.trim();
+  if (key) sessionStorage.setItem(DELETE_KEY_STORAGE, key);
+  return key;
+}
+
+async function deleteListing(id) {
+  const job = ALL_JOBS.find(x => x.id === id);
+  const label = job ? `${job.company || '?'} — ${job.role || '?'}` : id;
+  if (!confirm(`Delete ${id} from Job_Listings.csv?\n\n${label}\n\nThis cannot be undone.`)) {
+    return;
+  }
+  const key = getDeleteKey();
+  if (!key) {
+    toast('Delete cancelled — no key. Or run: python3 scripts/delete_listing.py ' + id, 'warning');
+    return;
+  }
+
+  toast('Deleting ' + id + '…', 'loading');
+  try {
+    const resp = await fetch(DELETE_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, key }),
+    });
+    let data = {};
+    try { data = await resp.json(); } catch (_) { /* ignore */ }
+
+    if (!resp.ok || !data.ok) {
+      const err = (data && data.error) || ('HTTP ' + resp.status);
+      if (resp.status === 503 || /not configured/i.test(err)) {
+        toast('API not configured. Use: python3 scripts/delete_listing.py ' + id, 'error');
+      } else if (resp.status === 401) {
+        sessionStorage.removeItem(DELETE_KEY_STORAGE);
+        toast('Invalid delete key — try again', 'error');
+      } else {
+        toast('Delete failed: ' + err, 'error');
+      }
+      return;
+    }
+
+    ALL_JOBS = ALL_JOBS.filter(j => j.id !== id);
+    delete APPROVALS[id];
+    delete GENERATED[id];
+    localStorage.setItem('cl_approvals', JSON.stringify(APPROVALS));
+    localStorage.setItem('cl_generated', JSON.stringify(GENERATED));
+    render();
+    toast('Deleted ' + id + ' from Job_Listings.csv', 'success');
+  } catch (e) {
+    toast(
+      'Network error talking to delete API. Set cl_delete_api in localStorage or run: python3 scripts/delete_listing.py ' + id,
+      'error'
+    );
   }
 }
 

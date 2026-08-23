@@ -5,5 +5,11 @@
   "buildCommand": null,
   "outputDirectory": "docs",
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "functions": {
+    "api/delete-listing.js": {
+      "memory": 256,
+      "maxDuration": 15
+    }
+  }
 }

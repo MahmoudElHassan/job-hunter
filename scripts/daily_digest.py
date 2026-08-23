@@ -5,7 +5,6 @@ Designed to be run as a GitHub Action (digest.yml) at end of business day.
 """
 
 import csv
-import json
 import os
 import sys
 from collections import Counter
@@ -13,27 +12,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
-
-# #region agent log
-_DEBUG_LOG = Path(__file__).resolve().parent.parent / ".cursor" / "debug-08a199.log"
-
-
-def _agent_log(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "digest-review") -> None:
-    try:
-        payload = {
-            "sessionId": "08a199",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
-        }
-        with _DEBUG_LOG.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(payload) + "\n")
-    except Exception:
-        pass
-# #endregion
 
 ROOT = Path(__file__).parent.parent
 LISTINGS = ROOT / "data" / "Job_Listings.csv"
@@ -48,9 +26,6 @@ def today_str() -> str:
 def send_telegram(text: str, token: str, chat_id: str) -> bool:
     if not token or not chat_id:
         print(f"⚠️  Telegram not configured. Message would be:\n{text[:300]}...")
-        # #region agent log
-        _agent_log("H3", "daily_digest.py:send_telegram", "telegram not configured", {"configured": False})
-        # #endregion
         return False
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     base_payload = {
@@ -61,9 +36,6 @@ def send_telegram(text: str, token: str, chat_id: str) -> bool:
     try:
         resp = requests.post(url, json={**base_payload, "parse_mode": "Markdown"}, timeout=15)
         if resp.status_code == 200:
-            # #region agent log
-            _agent_log("H3", "daily_digest.py:send_telegram", "markdown send ok", {"status": 200})
-            # #endregion
             return True
         print(
             f"⚠️  Telegram Markdown failed (status {resp.status_code}), retrying plain text",
@@ -75,15 +47,9 @@ def send_telegram(text: str, token: str, chat_id: str) -> bool:
     try:
         resp = requests.post(url, json=base_payload, timeout=15)
         resp.raise_for_status()
-        # #region agent log
-        _agent_log("H3", "daily_digest.py:send_telegram", "plain-text fallback ok", {"status": resp.status_code})
-        # #endregion
         return True
     except requests.RequestException as e:
         print(f"❌ Telegram send failed: {e}", file=sys.stderr)
-        # #region agent log
-        _agent_log("H3", "daily_digest.py:send_telegram", "send failed", {"error": type(e).__name__})
-        # #endregion
         return False
 
 
@@ -153,29 +119,7 @@ def main():
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-    # #region agent log
-    _agent_log(
-        "H1",
-        "daily_digest.py:main",
-        "requests imported; starting digest",
-        {
-            "requests_ok": True,
-            "has_token": bool(token),
-            "has_chat": bool(chat_id),
-            "today_utc": today_str(),
-        },
-    )
-    # #endregion
-
     stats = gather_today()
-    # #region agent log
-    _agent_log(
-        "H4",
-        "daily_digest.py:main",
-        "gather_today",
-        {"new_today": stats["new_today"], "total": stats["total"]},
-    )
-    # #endregion
     msg = format_digest(stats)
     print(msg)
     configured = bool(token and chat_id)

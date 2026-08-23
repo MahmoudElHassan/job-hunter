@@ -4,12 +4,14 @@
 
 ## What it does
 
-- **Scans 30+ queries** across main boards (LinkedIn, Bayt, GulfTalent, Indeed, Glassdoor, RemoteOK, Arc.dev) + **freelance** (Upwork, Toptal, Mostaql, Contra, Braintrust, HackerNews Who's Hiring) + OSS bounties
-- **Scores each result 1–5** using keyword + location + sponsorship heuristics
-- **Notifies via Telegram** on score 4–5 finds
+- **Scans focused boards** — LinkedIn jobs + hiring posts, Bayt / GulfTalent / Indeed, and freelance (Upwork, Mostaql, Contra, Braintrust, PeoplePerHour). Last **48 hours** only.
+- **Scores each result 1–5** and keeps only .NET/C# stack fits that are **remote or visa-friendly**
+- **Fail-closed open checks** on LinkedIn job pages and Gulf/freelance URLs (drops closed / unreachable)
+- **Notifies via Telegram** with the top 5 by score (5★ before 4★)
 - **Stores everything** in `data/Job_Listings.csv` (deduped) + `data/daily/`
 - **Runs on GitHub Actions** for free (2000 min/month, scheduled cron)
 - **Tailors CVs** on demand via Mavis (in-chat) — no LLM key needed
+- **Delete from cover-letter board** (Yes/No + delete key) or `python3 scripts/delete_listing.py JOB-xxx`
 
 ## File layout
 
@@ -57,6 +59,25 @@ repo as a Python app because of `requirements.txt` / `job_hunter.py`):
    - `/` → `docs/index.html` (dashboard with filters)
    - `/cover-letter/` → `docs/cover-letter/index.html`
 5. The dashboard still fetches the CSV directly from the GitHub raw URL, so it picks up every scheduled scan automatically — no rebuild required.
+
+### Cover-letter delete (optional)
+
+To delete a listing from the cover-letter board into `data/Job_Listings.csv`:
+
+1. In Vercel → Project → Settings → Environment Variables, add:
+   - `DELETE_KEY` — a passphrase only you know
+   - `GITHUB_TOKEN` — fine-grained PAT with **Contents: Read and write** on this repo
+2. Redeploy.
+3. On `/cover-letter/`, click **Delete** → confirm Yes → enter the delete key once per session.
+
+If the API URL is not `https://job-hunter.vercel.app`, set it in the browser console:
+`localStorage.setItem('cl_delete_api', 'https://YOUR-PROJECT.vercel.app/api/delete-listing')`
+
+Local alternative (no Vercel):
+
+```bash
+python3 scripts/delete_listing.py JOB-xxx
+```
 
 If an old project still has Framework = Python in Vercel Project Settings, set it to **Other** (or clear Override) and redeploy.
 

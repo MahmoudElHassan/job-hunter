@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import sys
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 import requests
@@ -48,12 +49,13 @@ def tavily_search(
     On HTTP 432 (plan limit exceeded), sets `tavily_plan_limit_hit()` and
     skips further network calls for the rest of the process.
 
-    `freshness_days` maps to Tavily `time_range` per docs:
-      <= 1   → "day"
-      <= 7   → "week"
-      <= 31  → "month"
-      else   → "year"
-    `time_range` and `start_date` must not be combined.
+    `freshness_days` maps to Tavily recency:
+      <= 2   → start_date = now UTC minus N days (48h when N=2)
+               (no time_range — API forbids combining them)
+      <= 7   → time_range "week"
+      <= 31  → time_range "month"
+      else   → time_range "year"
+    If start_date is rejected (4xx other than 432), falls back to time_range=day.
     """
     global _PLAN_LIMIT_HIT
     if _PLAN_LIMIT_HIT:
@@ -67,14 +69,18 @@ def tavily_search(
         "include_raw_content": False,
         "topic": "general",
     }
+    used_start_date = False
     if freshness_days is not None:
         try:
             days = int(freshness_days)
         except (TypeError, ValueError):
             days = None
         if days is not None and days > 0:
-            if days <= 1:
-                payload["time_range"] = "day"
+            if days <= 2:
+                # Exact window (e.g. 48h) via start_date instead of coarse "day".
+                start = datetime.now(timezone.utc) - timedelta(days=days)
+                payload["start_date"] = start.strftime("%Y-%m-%d")
+                used_start_date = True
             elif days <= 7:
                 payload["time_range"] = "week"
             elif days <= 31:
@@ -91,6 +97,24 @@ def tavily_search(
                 file=sys.stderr,
             )
             return []
+        # start_date rejected → fall back to time_range=day (stricter 24h).
+        if used_start_date and resp.status_code >= 400 and resp.status_code != 432:
+            print(
+                f"⚠️  Tavily start_date rejected ({resp.status_code}); "
+                "retrying with time_range=day",
+                file=sys.stderr,
+            )
+            payload.pop("start_date", None)
+            payload["time_range"] = "day"
+            resp = requests.post(TAVILY_URL, json=payload, timeout=30)
+            if resp.status_code == 432:
+                _PLAN_LIMIT_HIT = True
+                print(
+                    "❌ Tavily plan/key limit exceeded (HTTP 432). "
+                    "Upgrade the plan or wait for the quota reset — aborting further queries.",
+                    file=sys.stderr,
+                )
+                return []
         resp.raise_for_status()
         data = resp.json()
         return data.get("results", [])
