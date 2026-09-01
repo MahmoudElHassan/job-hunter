@@ -1,0 +1,3 @@
+name,env_var,enabled,notes
+Default_Travily_key,DEFAULT_TAVILY_KEY,true,Dev/free key — currently enabled
+Payasyougo_Tarvily_key,PAYASYOUGO_TAVILY_KEY,false,Paid usage key — disabled until Default quota is exhausted

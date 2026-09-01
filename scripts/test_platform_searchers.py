@@ -312,8 +312,8 @@ check("canonicalize: same URL with different trackers dedupes",
       canonicalize_url("https://example.com/p?utm_source=y"),
       True)
 
-# ---- 7. ORDER 2.1: freshness_days maps to time_range ----
-section("7. ORDER 2.1 — freshness_days → time_range")
+# ---- 7. ORDER 2.1: freshness_days maps to start_date / time_range ----
+section("7. ORDER 2.1 — freshness_days → start_date / time_range")
 
 import requests as _req  # noqa: E402
 
@@ -329,22 +329,41 @@ def _fake_post(url, json=None, timeout=None, **kw):
     captured.append({"url": url, "json": dict(json or {})})
     return _FakeResp()
 
-# days -> time_range expectations
-expected_time_range = [(1, "day"), (2, "week"), (3, "week"), (7, "week"),
-                       (8, "month"), (31, "month"), (32, "year"),
-                       (200, "year"), (0, None), (-1, None), (None, None),
-                       ("abc", None)]
+# days <= 2 → start_date (48h window); 3-7 → week; 8-31 → month; 32+ → year
+expected_freshness = [
+    (1, "start_date"),
+    (2, "start_date"),
+    (3, "week"),
+    (7, "week"),
+    (8, "month"),
+    (31, "month"),
+    (32, "year"),
+    (200, "year"),
+    (0, None),
+    (-1, None),
+    (None, None),
+    ("abc", None),
+]
 _orig_post = _req.post
 _req.post = _fake_post  # type: ignore
 try:
-    for days, expected in expected_time_range:
+    for days, expected in expected_freshness:
         captured.clear()
         tavily_search("test", "fake-key", freshness_days=days)
         assert captured, f"no captured payload for days={days!r}"
         payload = captured[0]["json"]
-        actual = payload.get("time_range")
-        check(f"freshness_days={days!r} → time_range={expected!r}",
-              actual, expected)
+        if expected == "start_date":
+            check(f"freshness_days={days!r} → start_date set",
+                  "start_date" in payload and "time_range" not in payload,
+                  True)
+        elif expected is None:
+            check(f"freshness_days={days!r} → no time_range",
+                  payload.get("time_range"), None)
+            check(f"freshness_days={days!r} → no start_date",
+                  payload.get("start_date"), None)
+        else:
+            check(f"freshness_days={days!r} → time_range={expected!r}",
+                  payload.get("time_range"), expected)
 finally:
     _req.post = _orig_post  # type: ignore
 
@@ -557,10 +576,10 @@ def _fake_get_timeout(url, headers=None, timeout=None, allow_redirects=None, **k
 
 _req.get = _fake_get_timeout  # type: ignore
 try:
-    check("linkedin_job_is_open: timeout → True (fail-open)",
+    check("linkedin_job_is_open: timeout → False (fail-closed)",
           job_hunter.linkedin_job_is_open(
               "https://www.linkedin.com/jobs/view/123456"),
-          True)
+          False)
 finally:
     _req.get = _orig_get2  # type: ignore
 
@@ -684,9 +703,83 @@ check("GitHub: topics/dotnet → False",
 
 li_jobs_fresh = [r for r in rows if (r.get("board") or "") == "linkedin_jobs"
                  and (r.get("enabled") or "").lower() == "true"]
-check("linkedin_jobs freshness_days all = 1",
-      all((r.get("freshness_days") or "").strip() == "1" for r in li_jobs_fresh),
+check("linkedin_jobs freshness_days all = 2",
+      all((r.get("freshness_days") or "").strip() == "2" for r in li_jobs_fresh),
       True)
+
+section("16. CV profile — stack gate, seniority, remote/visa")
+from job_hunter import score_result, has_stack_signal, fits_remote_or_visa
+
+# Strong Mid/Senior .NET SaaS role scores high
+s5, _ = score_result(
+    "Senior ASP.NET Core Backend Developer",
+    "https://linkedin.com/jobs/view/123",
+    "Remote SaaS multi-tenant Clean Architecture PostgreSQL Azure CI/CD visa sponsorship",
+)
+check("Senior .NET SaaS remote scores >= 4", s5 >= 4, True)
+
+# Python-only fails stack gate
+check("Python FastAPI without .NET fails stack gate",
+      has_stack_signal("Senior Python FastAPI Backend", "PostgreSQL Redis Docker", ""),
+      False)
+
+# Next.js-only fails stack gate
+check("Next.js without .NET fails stack gate",
+      has_stack_signal("Senior Next.js Full Stack", "TypeScript React Vercel", ""),
+      False)
+
+# .NET passes stack gate
+check(".NET in title passes stack gate",
+      has_stack_signal("Mid-level ASP.NET Core Developer", "Azure SQL Server", ""),
+      True)
+
+# Junior rejected
+s_junior, _ = score_result("Junior .NET Developer", "https://x.com", "remote asp.net")
+check("Junior .NET rejected (score 1)", s_junior, 1)
+
+# Staff rejected
+s_staff, _ = score_result("Staff Software Engineer .NET", "https://x.com", "remote asp.net")
+check("Staff .NET rejected (score 1)", s_staff, 1)
+
+# Onsite Cairo without remote/visa fails (even if query had visa)
+check("Cairo onsite without visa fails remote/visa gate",
+      fits_remote_or_visa(
+          "Backend Developer",
+          "Onsite Cairo office only",
+          location_filter="gulf",
+          query_text="C# Backend Engineer Gulf visa sponsorship",
+      ),
+      False)
+
+# Remote .NET passes
+check("Remote .NET in snippet passes remote/visa gate",
+      fits_remote_or_visa(
+          "Senior ASP.NET Core Developer",
+          "Fully remote worldwide",
+          location_filter="",
+          query_text="",
+      ),
+      True)
+
+# Sponsored Gulf role passes from snippet
+check("Gulf role with visa sponsorship passes",
+      fits_remote_or_visa(
+          "ASP.NET Developer",
+          "Dubai UAE visa sponsorship provided",
+          location_filter="uae",
+          query_text="",
+      ),
+      True)
+
+# Query visa text alone must NOT pass unrelated onsite result
+check("Query visa text does not pass onsite result without snippet visa",
+      fits_remote_or_visa(
+          "Software Engineer",
+          "Onsite office Cairo",
+          location_filter="gulf",
+          query_text="Gulf visa sponsorship ASP.NET",
+      ),
+      False)
 
 section("15. Tavily HTTP 432 plan-limit abort")
 reset_tavily_plan_limit_flag()

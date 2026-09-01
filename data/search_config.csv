@@ -1,29 +1,30 @@
 board,query,location_filter,priority,enabled,freshness_days,notes
 # === MAIN JOBS — LinkedIn Jobs (dedicated searcher) ===
-linkedin_jobs,.NET Backend Developer remote,remote,1,true,2,Mainstream
-linkedin_jobs,ASP.NET Core Developer remote sponsorship,remote,1,true,2,
-linkedin_jobs,C# Backend Engineer Gulf visa,gulf,1,true,2,
-linkedin_jobs,Full Stack .NET React remote,remote,2,true,2,
-linkedin_jobs,Software Engineer .NET sponsorship UAE,uae,1,true,2,
-linkedin_jobs,Senior Software Engineer .NET Europe visa,europe,2,true,2,
-linkedin_jobs,Backend Developer Fintech .NET remote,remote,2,true,2,
-linkedin_jobs,Clean Architecture .NET remote,remote,2,true,2,
+linkedin_jobs,Senior ASP.NET Core Backend remote,remote,1,true,2,Mid/Senior backend
+linkedin_jobs,Mid-level .NET Backend Developer remote,remote,1,true,2,
+linkedin_jobs,ASP.NET Core SaaS platform engineer remote,remote,1,true,2,SaaS/multi-tenant
+linkedin_jobs,.NET payments fintech backend remote,remote,1,true,2,Stripe/payment gateway
+linkedin_jobs,C# Backend Engineer Gulf visa sponsorship,gulf,1,true,2,
+linkedin_jobs,ASP.NET Core multi-tenant Clean Architecture remote,remote,2,true,2,
+linkedin_jobs,Full Stack .NET React TypeScript remote,remote,2,true,2,.NET + React full-stack
+linkedin_jobs,Senior .NET Developer UAE visa sponsorship,uae,1,true,2,
+linkedin_jobs,Senior ASP.NET Core Europe visa sponsorship,europe,2,true,2,
 
 # === LinkedIn Posts (lead source, source_type=post, score cap 4) ===
-linkedin_posts,".NET",remote,2,true,2,Hiring posts
-linkedin_posts,"ASP.NET",remote,2,true,2,Hiring posts
-linkedin_posts,"C#",gulf,2,true,2,Gulf hiring posts
+linkedin_posts,"ASP.NET Core hiring",remote,2,true,2,Hiring posts
+linkedin_posts,".NET backend hiring",remote,2,true,2,Hiring posts
+linkedin_posts,"C# developer hiring",gulf,2,true,2,Gulf hiring posts
 
 # === MAIN JOBS — Bayt / GulfTalent ===
-bayt,".NET Developer",gulf,1,true,2,
+bayt,"Senior .NET Developer",gulf,1,true,2,
 bayt,"ASP.NET Core Saudi",ksa,1,true,2,
-bayt,"Backend Developer C# UAE",uae,1,true,2,
-gulftalent,".NET Developer",gulf,1,true,2,
-gulftalent,"Software Engineer .NET",gulf,2,true,2,
+bayt,"Backend Developer C# UAE visa",uae,1,true,2,
+gulftalent,"ASP.NET Core Developer",gulf,1,true,2,
+gulftalent,"Senior .NET Backend",gulf,2,true,2,
 
 # === MAIN JOBS — Indeed / Glassdoor ===
-indeed,"ASP.NET Core Developer remote sponsorship",remote,1,true,2,
-indeed,"C# Backend Developer UAE visa",uae,1,true,2,
+indeed,"Senior ASP.NET Core Developer remote sponsorship",remote,1,true,2,
+indeed,"Mid-level .NET Backend UAE visa",uae,1,true,2,
 glassdoor,".NET Backend Gulf",gulf,2,false,2,Disabled — focus LinkedIn/Gulf/freelance
 
 # === REMOTE-FIRST BOARDS ===
@@ -41,9 +42,9 @@ google,"site:myworkdayjobs.com ASP.NET",remote,2,false,2,Disabled — ATS noise 
 
 # === FREELANCE ===
 upwork,"ASP.NET Core freelancer",remote,1,true,2,Freelance
-upwork,"C# backend contract",remote,1,true,2,Freelance
+upwork,"C# backend SaaS contract",remote,1,true,2,Freelance
 upwork,".NET web API hourly",remote,1,true,2,Freelance
-upwork,".NET consultant",remote,2,true,2,Freelance
+upwork,".NET consultant Clean Architecture",remote,2,true,2,Freelance
 toptal,".NET developer apply",remote,1,false,2,Disabled — only category SERPs are public; no reliable job-detail URL pattern
 mostaql,"ASP.NET",arabic,1,true,2,Arabic freelance
 mostaql,"backend C#",arabic,1,true,2,Arabic freelance

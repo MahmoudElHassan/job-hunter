@@ -1,0 +1,553 @@
+\documentclass[10pt, letterpaper]{article}
+
+% Packages:
+\usepackage[
+    ignoreheadfoot, % set margins without considering header and footer
+    top=2 cm, % seperation between body and page edge from the top
+    bottom=2 cm, % seperation between body and page edge from the bottom
+    left=2 cm, % seperation between body and page edge from the left
+    right=2 cm, % seperation between body and page edge from the right
+    footskip=1.0 cm, % seperation between body and footer
+    % showframe % for debugging 
+]{geometry} % for adjusting page geometry
+\usepackage[explicit]{titlesec} % for customizing section titles
+\usepackage{tabularx} % for making tables with fixed width columns
+\usepackage{array} % tabularx requires this
+\usepackage[dvipsnames]{xcolor} % for coloring text
+\definecolor{primaryColor}{RGB}{0, 79, 144} % define primary color
+\usepackage{enumitem} % for customizing lists
+\usepackage{fontawesome5} % for using icons
+\usepackage{amsmath} % for math
+\usepackage[
+    pdftitle={Mahmoud's CV},
+    pdfauthor={Mahmoud},
+    pdfcreator={LaTeX with RenderCV},
+    colorlinks=true,
+    urlcolor=primaryColor
+]{hyperref} % for links, metadata and bookmarks
+\usepackage[pscoord]{eso-pic} % for floating text on the page
+\usepackage{calc} % for calculating lengths
+\usepackage{bookmark} % for bookmarks
+\usepackage{lastpage} % for getting the total number of pages
+\usepackage{changepage} % for one column entries (adjustwidth environment)
+\usepackage{paracol} % for two and three column entries
+\usepackage{ifthen} % for conditional statements
+\usepackage{needspace} % for avoiding page brake right after the section title
+\usepackage{iftex} % check if engine is pdflatex, xetex or luatex
+
+% Ensure that generate pdf is machine readable/ATS parsable:
+\ifPDFTeX
+    \input{glyphtounicode}
+    \pdfgentounicode=1
+    \usepackage[T1]{fontenc}
+    \usepackage[utf8]{inputenc}
+    \usepackage{lmodern}
+\fi
+
+\usepackage[default, type1]{sourcesanspro} 
+
+% Some settings:
+\AtBeginEnvironment{adjustwidth}{\partopsep0pt} % remove space before adjustwidth environment
+\pagestyle{empty} % no header or footer
+\setcounter{secnumdepth}{0} % no section numbering
+\setlength{\parindent}{0pt} % no indentation
+\setlength{\topskip}{0pt} % no top skip
+\setlength{\columnsep}{0.15cm} % set column seperation
+\makeatletter
+\let\ps@customFooterStyle\ps@plain % Copy the plain style to customFooterStyle
+\patchcmd{\ps@customFooterStyle}{\thepage}{
+    \color{gray}\textit{\small Mahmoud's CV - Page \thepage{} of \pageref*{LastPage}}
+}{}{} % replace number by desired string
+\makeatother
+\pagestyle{customFooterStyle}
+
+\titleformat{\section}{
+    % avoid page braking right after the section title
+    \needspace{4\baselineskip}
+    % make the font size of the section title large and color it with the primary color
+    \Large\color{primaryColor}
+}{
+}{
+}{
+    % print bold title, give 0.15 cm space and draw a line of 0.8 pt thickness
+    % from the end of the title to the end of the body
+    \textbf{#1}\hspace{0.15cm}\titlerule[0.8pt]\hspace{-0.1cm}
+}[] % section title formatting
+
+\titlespacing{\section}{
+    % left space:
+    -1pt
+}{
+    % top space:
+    0.3 cm
+}{
+    % bottom space:
+    0.2 cm
+} % section title spacing
+
+% \renewcommand\labelitemi{$\vcenter{\hbox{\small$\bullet$}}$} % custom bullet points
+\newenvironment{highlights}{
+    \begin{itemize}[
+        topsep=0.10 cm,
+        parsep=0.10 cm,
+        partopsep=0pt,
+        itemsep=0pt,
+        leftmargin=0.4 cm + 10pt
+    ]
+}{
+    \end{itemize}
+} % new environment for highlights
+
+\newenvironment{highlightsforbulletentries}{
+    \begin{itemize}[
+        topsep=0.10 cm,
+        parsep=0.10 cm,
+        partopsep=0pt,
+        itemsep=0pt,
+        leftmargin=10pt
+    ]
+}{
+    \end{itemize}
+} % new environment for highlights for bullet entries
+
+
+\newenvironment{onecolentry}{
+    \begin{adjustwidth}{
+        0.2 cm + 0.00001 cm
+    }{
+        0.2 cm + 0.00001 cm
+    }
+}{
+    \end{adjustwidth}
+} % new environment for one column entries
+
+\newenvironment{twocolentry}[2][]{
+    \onecolentry
+    \def\secondColumn{#2}
+    \setcolumnwidth{\fill, 4.5 cm}
+    \begin{paracol}{2}
+}{
+    \switchcolumn \raggedleft \secondColumn
+    \end{paracol}
+    \endonecolentry
+} % new environment for two column entries
+
+\newenvironment{threecolentry}[3][]{
+    \onecolentry
+    \def\thirdColumn{#3}
+    \setcolumnwidth{1 cm, \fill, 4.5 cm}
+    \begin{paracol}{3}
+    {\raggedright #2} \switchcolumn
+}{
+    \switchcolumn \raggedleft \thirdColumn
+    \end{paracol}
+    \endonecolentry
+} % new environment for three column entries
+
+\newenvironment{header}{
+    \setlength{\topsep}{0pt}\par\kern\topsep\centering\color{primaryColor}\linespread{1.5}
+}{
+    \par\kern\topsep
+} % new environment for the header
+
+\newcommand{\placelastupdatedtext}{% \placetextbox{<horizontal pos>}{<vertical pos>}{<stuff>}
+  \AddToShipoutPictureFG*{% Add <stuff> to current page foreground
+    \put(
+        \LenToUnit{\paperwidth-2 cm-0.2 cm+0.05cm},
+        \LenToUnit{\paperheight-1.0 cm}
+    ){\vtop{{\null}\makebox[0pt][c]{
+        \small\color{gray}\textit{Last updated in December 2025}\hspace{\widthof{Last updated in September 2024}}
+    }}}%
+  }%
+}%
+
+% save the original href command in a new command:
+\let\hrefWithoutArrow\href
+
+% new command for external links:
+\renewcommand{\href}[2]{\hrefWithoutArrow{#1}{\ifthenelse{\equal{#2}{}}{ }{#2 }\raisebox{.15ex}{\footnotesize \faExternalLink*}}}
+
+
+\begin{document}
+    \newcommand{\AND}{\unskip
+        \cleaders\copy\ANDbox\hskip\wd\ANDbox
+        \ignorespaces
+    }
+    \newsavebox\ANDbox
+    \sbox\ANDbox{}
+
+    \placelastupdatedtext
+    \begin{header}
+        \fontsize{30 pt}{30 pt}
+        \textbf{Mahmoud ElHassan Mahmoud}
+
+        \vspace{0.2 cm}
+
+        \normalsize
+        \mbox{{\footnotesize\faMapMarker*}\hspace*{0.13cm}Al-Hanovel, al-Agamy}%
+        \kern 0.2 cm%
+        \AND%
+        \kern 0.2 cm%
+        \mbox{\hrefWithoutArrow{mailto:mahmoudelhassan9@gmail.com}{{\footnotesize\faEnvelope[regular]}\hspace*{0.13cm}G-mail}}%
+        \kern 0.2 cm%
+        \AND%
+        \kern 0.2 cm%
+        \mbox{\hrefWithoutArrow{tel:+201005152604}{{\footnotesize\faPhone*}\hspace*{0.13cm}+201005152604}}%
+        \kern 0.2 cm%
+        \AND%
+        \kern 0.2 cm%
+        \mbox{\hrefWithoutArrow{https://mahmoud-portofolio-eta.vercel.app/}{{\footnotesize\faLink}\hspace*{0.13cm}Portfolio}}%
+        \kern 0.2 cm%
+        \AND%
+        \kern 0.2 cm%
+        \mbox{\hrefWithoutArrow{https://linkedin.com/in/mahmoud-elhassan-94r}{{\footnotesize\faLinkedinIn}\hspace*{0.13cm}Linked-In}}%
+        \kern 0.2 cm%
+        \AND%
+        \kern 0.2 cm%
+        \mbox{\hrefWithoutArrow{https://github.com/MahmoudElHassan}{{\footnotesize\faGithub}\hspace*{0.13cm}GitHub}}%
+    \end{header}
+
+    \vspace{0.3 cm - 0.3 cm}
+
+
+    \section{Personal Profile}
+
+
+
+        
+        \begin{onecolentry}
+        An ITI Institute graduate student enrolled in the track full-stack web development ASP.Net and Angular JS. Dedicated to Back-end ASP.Net, having +6 year of expertise, and specializing in Back-end ASP.Net web developer, and algorithms. Searching mainly for Back-end, and Database.
+        \end{onecolentry}
+
+        \vspace{0.2 cm}
+
+        % \begin{onecolentry}
+        %     The boilerplate content was inspired by \href{https://github.com/dnl-blkv/mcdowell-cv}{Gayle McDowell}.
+        % \end{onecolentry}
+
+
+    
+    % \section{Quick Guide}
+
+    % \begin{onecolentry}
+    %     \begin{highlightsforbulletentries}
+
+
+    %     \item Each section title is arbitrary and each section contains a list of entries.
+
+    %     \item There are 7 unique entry types: \textit{BulletEntry}, \textit{TextEntry}, \textit{EducationEntry}, \textit{ExperienceEntry}, \textit{NormalEntry}, \textit{PublicationEntry}, and \textit{OneLineEntry}.
+
+    %     \item Select a section title, pick an entry type, and start writing your section!
+
+    %     \item \href{https://docs.rendercv.com/user_guide/}{Here}, you can find a comprehensive user guide for RenderCV.
+
+
+    %     \end{highlightsforbulletentries}
+    % \end{onecolentry}
+
+    \section{Education}
+        \begin{threecolentry}{\textbf{HS}}{
+            Graduated 2014
+        }
+            \item \textbf{M.K.S Language School} 
+            \item High School.
+
+        \end{threecolentry}
+
+
+        \begin{threecolentry}{\textbf{BS}}{
+            2014 - 2017
+        }
+            \item \textbf{Faculty of Tourism and Hotels at Alexandria University}
+            \item Hotels Management Department.
+            % \begin{highlights}
+            % \end{highlights}
+        \end{threecolentry}
+
+
+        \begin{threecolentry}{\textbf{Dip}}{
+            November 2022
+        }
+            \item \textbf{Information Technology Institute (ITI)}
+            \item Diploma at track Full Stack web development ASP.Net and AngularJS.
+            % \begin{highlights}
+            %     \item GPA: 3.9/4.0 (\href{https://example.com}{a link to somewhere})
+            %     \item \textbf{Coursework:} Computer Architecture, Comparison of Learning Algorithms, Computational Theory
+            % \end{highlights}
+        \end{threecolentry}
+        
+        \vspace{0.2 cm}
+    
+    \section{Experience}
+ 
+    \begin{twocolentry}{
+
+    \vspace{1.2 cm}
+    
+            Remotely
+            
+            California, USA
+            
+            April 2022 - January 2025
+
+            \item {\textbf{\href{https://www.astrobasic.com}{NumeriiSoft Website}
+                }}
+        }
+            \textbf{Astro pvt Company}
+            \item ASP.NET Backend Developer
+            \item {\textbf{Job Role: } 
+              As an ASP.NET Developer at Astro Pvt Company, I specialise in developing and maintaining backend solutions using ASP.NET Core, SQL Server, and Entity Framework Core to ensure high performance and scalability for websites and Mobile Apps. I design and implement RESTful APIs for seamless client integration and handle extensive database management, optimising SQL Server, MongoDB, and Redis for efficient data storage and retrieval. In addition to backend responsibilities, I implement CI/CD pipelines in Azure App Server and deploy containerised applications with SQL Server databases, ensuring smooth, continuous delivery. On the front-end, I collaborate on projects using AngularJS, ReactJS, and TypeScript to build dynamic, responsive user interfaces.}
+                      
+    \end{twocolentry}
+
+    \vspace{0.7 cm}
+
+    \begin{twocolentry}{
+
+    \vspace{1.2 cm}
+    
+            Full-Time
+            
+            Makkah, KSA
+            
+            January 2025 - January 2026
+
+            \item {\textbf{\href{https://al-tamken.sa/}{Tamkeen Website}
+                }} 
+        }
+            \textbf{Digital Tamkeen (Digital Matrix)}
+            \item ASP.NET Backend Developer
+            \item {\textbf{Job Role: } 
+              As an ASP.NET Developer at Digital Tamkeen (Digital Matrix) Company, I specialist in developing and maintaining backend solutions using ASP.NET Core, Postgres Database, MongoDB, and Entity Framework Core to ensure high performance and scalability for websites and Mobile Apps. I design and implement RESTful APIs for seamless client integration and handle extensive database management, optimising Postgres Server, MongoDB, and Redis for efficient data storage and retrieval. In addition to backend responsibilities, deploy containerised applications with Postgres Server DB, ensuring smooth and continuous delivery. On the front-end, I collaborate on projects utilising and creating a Software Server by using SaaS with connecting with the Azure App Server.}
+                       
+    \end{twocolentry}
+
+
+    \vspace{0.4 cm}
+    
+    % \section{Publications}
+
+
+
+        
+    %     \begin{samepage}
+    %         \begin{twocolentry}{
+    %             Jan 2004
+    %         }
+    %             \textbf{3D Finite Element Analysis of No-Insulation Coils}
+
+    %             \vspace{0.10 cm}
+
+    %             \mbox{Frodo Baggins}, \mbox{\textbf{\textit{John Doe}}}, \mbox{Samwise Gamgee}
+    %             \vspace{0.10 cm}
+
+    %     \href{https://doi.org/10.1109/TASC.2023.3340648}{10.1109/TASC.2023.3340648}
+    %         \end{twocolentry}
+    %     \end{samepage}
+
+
+    
+    \section{Projects}   
+    \vspace{0.4 cm}
+        \begin{twocolentry}{
+            \href{https://numeriisoft.com/#/login}{NumeriiSoft WebSite}
+        }
+            \textbf{NumeriiSoft Project}
+            \begin{highlights}
+                \item {I built the entire backend a system that delivers personalized karmic/numerology insights and online astrology learning content. The backend was developed using ASP.NET Core Web API following a clean, layered architecture. I implemented Entity Framework Core with a SQL database, applying the Repository Pattern to keep data access modular and maintainable.}
+                \item {A core part of the platform involved integrating multiple third-party astrology/numerology APIs to compute karmic profiles based on user inputs (name, birth date, birth details). The backend merges these calculations into unified JSON responses for the frontend.}
+                \item {I also built the course management module, including endpoints for course catalogs, user enrollments, and personalized recommendations. Security was ensured through JWT authentication, strict validation, and standardized error handling. I documented the entire API using Swagger/OpenAPI to support client teams and testers.}
+                \item {\textbf{Technical Used:} Entity Framework Core, SQL Server, JWT Authentication, validation \& error handling.}
+            \end{highlights}
+        \end{twocolentry}
+
+        \vspace{0.8 cm}
+
+        \begin{twocolentry}{
+            \href{https://new-store.test.khzama.sa/login}{Khzama WebSite Test}
+        }
+            \textbf{Khzama Project} (Charity E-Commerce Donation Platform)
+            \begin{highlights}
+                \item {Built the backend for a full donation marketplace used by charities, mosques, and community projects in Makkah using ASP.NET Core Web API and Clean Architecture.}
+                \item {Implemented RESTful APIs for campaign management, donations, user authentication, reporting, and multi-tenant charity onboarding.}
+                \item {Applied Clean Architecture principles—Domain, Application, Infrastructure, API—to ensure modularity, scalability, and testability.}
+                \item {Developed donation workflows including carts, payment processing, transaction recording, and automated email receipts.}
+                \item {Implemented multi-tenancy to allow multiple charities to use the same SaaS platform with isolated data.}
+                \item {Deployed the entire platform on Azure App Service, configured CI/CD pipelines, and managed environment variables, scaling rules, and application configurations.}
+                \item {Ensured secure authentication, token handling, and endpoint protection using JWT, role-based authorization, and Identity best practices.}
+                \item {The solution is deployed as a SaaS product on Microsoft Azure, running on App Service with automatic scaling, environment configuration, and CI/CD pipelines via GitHub Actions/Azure Pipelines. Payment processing, donation tracking, and reporting are handled through secure, high-performance APIs.}
+            \end{highlights}
+            \begin{highlights}
+                \item {\textbf{Technical Used: } Built a multi-tenant charity e-commerce donation platform using ASP.NET Core, Clean Architecture, EF Core, and Azure App Service, implementing scalable APIs, secure donation workflows, and CI/CD automation.}
+            \end{highlights}
+        \end{twocolentry}
+
+        \vspace{0.8 cm}
+
+                \begin{twocolentry}{
+            \href{https://new-store.test.khzama.sa/login}{Matrix WebSite Test}
+        }
+            \textbf{Matrix Project} (Portal to create campaigns in Social Media platforms)
+            \begin{highlights}
+                \item {The project appears to be a backend platform designed to create and manage social media advertising campaigns, specifically tailored for e-commerce businesses or private marketplaces. The core value proposition is to streamline and automate the process of launching targeted marketing campaigns across various social networks from a single, unified interface.}
+                \item {Connect their e-commerce product catalogs or marketplace inventories.}
+                \item {Define target audiences and campaign objectives (e.g., brand awareness, conversions).}
+                \item {Automate the creation of ad creatives, copy, and targeting parameters.}
+                \item {Launch and manage these campaigns across multiple social media platforms (like Meta, Instagram, TikTok, etc.).}
+                \item {Track performance and optimize campaigns based on integrated analytics.}
+                \item {This workflow directly addresses the modern marketing need for dynamic, personalized customer journeys as highlighted in industry analyses, moving away from linear funnels to adaptive, multi-channel strategies}
+                % \item {}
+            \end{highlights}
+            \begin{highlights}
+                \item {\textbf{Technical Used: }Repository Pattern, SMS Services, Payment Gateway (AWS), Social Media platform APIs (Meta Marketing API, TikTok Ads API, etc.), MongoDB \& Redis Server. }
+            \end{highlights}
+        \end{twocolentry}
+
+        \vspace{0.8 cm}
+
+        \begin{twocolentry}{
+            \href{https://portal-test.aqwom.org.sa/login}{Aqwom WebSite Test}
+        }
+            \textbf{Aqwon Project} (Business Support Application Portal) 
+            \begin{highlights}
+        \item {Developed a full electronic portal for submitting and managing financial support applications using ASP.NET Core Web API and Clean Architecture.}
+        \item {Implemented a secure authentication system using ASP.NET Core Identity, role-based authorization, and JWT token validation.}
+        \item {Built a multi-step approval workflow with automated email notifications for reviewers, admins, and applicants.}
+        \item {Designed secure file upload \& document management features with validation, sanitized filenames, and protected storage.}
+        \item {Integrated reporting and analytics for admins, including application statistics, approval rates, and performance trends.}
+        \item {Added advanced search and filtering capabilities to streamline reviewing and decision-making.}
+        \item {Ensured clean separation of layers (Domain, Application, Infrastructure, API) for scalability, maintainability, and testability.}
+        \item {\textbf{Technical Used: } Built a multi-tenant charity e-commerce donation platform using ASP.NET Core, Clean Architecture, EF Core, and Azure App Service, implementing scalable APIs, secure donation workflows, and CI/CD automation.}            \end{highlights}
+        \end{twocolentry}
+
+        \vspace{1.0 cm}
+
+
+        \begin{twocolentry}{
+            \href{https://agency-bill-saas.vercel.app/}{Tfqo WebSite Test}
+        }
+            \textbf{Tfoq Website Project } (Arabic EdTech platform / Exams prep)
+            \begin{highlights}
+        \item {Developed Tfoq, a production Arabic EdTech web app that helps students prepare for standardized exams.}
+        \item {Delivered multi-role experiences (student, teacher, parent, admin), }
+        \item {Tfoq is a multi-role education product (student, parent, teacher, admin). }
+        \item {Customizable branding CMS, quiz/leaderboard flows, and a DeepSeek-powered chatbot with daily quotas.}
+        \item {Integrated Supabase (Auth, Postgres/RLS, Realtime, Edge Functions), deployed via Git/GitHub collaboration with the product owner, and prepared the product for multi-school SaaS expansion.}
+        
+   
+        \item {\textbf{Technical Used: } Supabase JS client, Auth (roles), React, TypeScript, Vite, Tailwind/shadcn, Supabase (Auth, Postgres, RLS, Realtime, Edge Functions), DeepSeek API, Git/GitHub, Vercel/Lovable}            
+        \end{highlights}
+        \end{twocolentry}
+
+        \vspace{1.0 cm}
+
+
+        \begin{twocolentry}{
+            \href{https://agency-bill-saas.vercel.app/}{Agency Bill WebSite Test}
+        }
+            \textbf{Agency Bill SaaS} (Demo Project) 
+            \begin{highlights}
+        \item {Built an invoicing platform where agencies can manage clients, track billable hours, create invoices, and share public payment links.}
+        \item {Designed tenant isolation and Owner/Staff permissions to prevent cross-agency access and protect billing actions.}
+        \item {Implemented invoice state rules, multi-currency billing, subscription limits, audit history, JWT authentication, and refresh-token rotation.}
+        \item {Added idempotent Stripe webhook handling and safe demo flows for payments, upgrades, overdue invoices, and reminders.}
+       \item {Deployed the system using Vercel, Render, Neon PostgreSQL, and Upstash Redis.}
+   
+        \item {\textbf{Technical Used: } .NET 9 Clean Architecture (Domain, Application, Infrastructure , Api, no MediatR), PostgreSQL, Redis, Docker Compose, Hangfire, xUnit + HTTP tests, React + Vite demo UI.}            
+        \end{highlights}
+        \end{twocolentry}
+
+        \vspace{1.0 cm}
+
+
+        \begin{twocolentry}{
+            \href{https://agency-bill-saas.vercel.app/}{AI Image Creator}
+        }
+            \textbf{AI Image Creator} (Demo Project) 
+            \begin{highlights}
+        \item {Built a full-stack platform that turns short prompts into branded, platform-ready social images.}
+        \item {Designed reusable brand kits that keep generated content consistent with each brand’s logo, tone, audience, colors, and content restrictions.}
+        \item {Integrated OpenAI and Gemini with a bring-your-own-key model; provider keys are encrypted in Supabase Vault and never exposed to the browser.}
+        \item {Added 13 presets covering Instagram, Facebook, LinkedIn, TikTok, YouTube, and X, including exact resizing, cropping, and optional logo watermarking.}
+        \item {Implemented secure multi-user access with Supabase Auth, row-level security, ownership checks, and JWKS-based JWT verification.}
+        \item {Built generation history, filtering, downloads, deletion, account management, and a read-only administration dashboard.}
+   
+        \item {\textbf{Technical Used: } Next.js, FastAPI, Python, TypeScript, and Supabase.}            
+        \end{highlights}
+        \end{twocolentry}
+
+        \vspace{1.0 cm}
+
+    
+    \section{Technologies}
+        \begin{onecolentry}
+            \item \textbf{Back-End Development:} ASP.NET Core, Entity Framework Core, RESTful APIs, and ASP.NET C\#.
+            \item \textbf{Database Management:} SQL Server DB, Postgres DB,  Mongo DB, and Redis Server.
+            \item \textbf{DevOps and Deployment:} Azure App Server, Azure DevOps, and Docker.
+            \item \textbf{Technologies:} ASP.NET, Microsoft SQL Server, XCode, and Interface Builder.
+            \item \textbf{Frontend Development:} Angular JS, React JS, JavaScript, TypeScript, and JQuery.
+            \item \textbf{Tools and Technologies:} GitHub, AJAX, JSON, and Linux commands.
+        \end{onecolentry}
+
+        \vspace{0.2 cm}
+
+
+
+    \section{Certificates}
+    
+        \begin{threecolentry}{\textbf{2022}}{
+            Microsoft
+        }
+            C\# Fundamental
+        \end{threecolentry}
+
+
+        \begin{threecolentry}{\textbf{2023}}{
+            Microsoft
+        }
+            REST API Advanced
+        \end{threecolentry}
+        
+        \begin{threecolentry}{\textbf{2022}}{
+            Udacity
+        }
+            Web Development
+            % \begin{highlights}
+            %     \item \textbf{Coursework:} Computer Architecture, Comparison of Learning Algorithms, Computational Theory
+            % \end{highlights}
+        \end{threecolentry}
+
+
+        \begin{threecolentry}{\textbf{2022}}{
+            Mahara-Tech
+        }
+            Database Fundamentals
+        \end{threecolentry}
+
+
+        \begin{threecolentry}{\textbf{2022}}{
+            Mahara-Tech
+        }
+            JavaScript
+        \end{threecolentry}
+
+
+        % \begin{threecolentry}{\textbf{2022}}{
+        %     Mahara-Tech
+        % }
+        %     Freelancing
+        % \end{threecolentry}
+
+         \vspace{0.2 cm}
+
+
+    \section{Languages}
+    
+        \begin{onecolentry}
+            \item \textbf{Arabic:} Native proficiency
+            \item \textbf{English:} Professional proficiency
+        \end{onecolentry}
+
+    
+
+\end{document}

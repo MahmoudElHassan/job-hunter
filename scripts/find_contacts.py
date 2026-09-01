@@ -42,7 +42,7 @@ APPS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Single source of truth for the Job_Listings.csv column layout.
 # Imported from job_hunter so the writers and readers can't drift.
-from job_hunter import LISTING_FIELDS  # noqa: E402
+from job_hunter import LISTING_FIELDS, resolve_tavily_key  # noqa: E402
 
 HUNTER_URL = "https://api.hunter.io/v2/domain-search"
 TAVILY_URL = "https://api.tavily.com/search"
@@ -358,11 +358,15 @@ def main():
     args = parser.parse_args()
 
     load_dotenv(ROOT / ".env")
-    tavily_key = os.environ.get("TAVILY_API_KEY", "")
+    tavily_key, tavily_key_name = resolve_tavily_key()
     hunter_key = os.environ.get("HUNTER_API_KEY", "")
 
     if not tavily_key:
-        sys.exit("❌ TAVILY_API_KEY not set. See .env.example.")
+        sys.exit(
+            f"❌ No value for enabled Tavily key '{tavily_key_name}'. "
+            "Set DEFAULT_TAVILY_KEY / PAYASYOUGO_TAVILY_KEY (see .env.example)."
+        )
+    print(f"🔑 Tavily key: {tavily_key_name} (enabled)")
 
     if not args.company and not args.url:
         sys.exit("❌ Provide --company or --url")

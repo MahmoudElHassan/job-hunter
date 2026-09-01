@@ -49,6 +49,8 @@ jobs:
 
       - name: Run scan
         env:
+          DEFAULT_TAVILY_KEY: ${{ secrets.DEFAULT_TAVILY_KEY }}
+          PAYASYOUGO_TAVILY_KEY: ${{ secrets.PAYASYOUGO_TAVILY_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

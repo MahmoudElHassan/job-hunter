@@ -48,6 +48,7 @@ _DEDICATED_SEARCHERS = (
 ROOT = Path(__file__).parent
 DATA = ROOT / "data"
 CONFIG_CSV = DATA / "search_config.csv"
+TAVILY_KEYS_CSV = DATA / "tavily_keys.csv"
 LISTINGS_CSV = DATA / "Job_Listings.csv"
 DAILY_DIR = DATA / "daily"
 APPS_DIR = DATA / "Applications"
@@ -78,16 +79,23 @@ TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 MAX_RESULTS_PER_QUERY = 8
 MAX_NOTIFICATIONS_PER_SCAN = 5  # avoid spam
 
-# Mahmoud's profile (baked-in scoring weights)
+# Mahmoud's profile (baked-in scoring weights) — sync with docs/PROFILE.md + docs/main.tex
 PROFILE = {
     "name": "Mahmoud ElHassan",
     "role_keywords": [
         ".net", "asp.net", "c#", "c sharp", "backend", "back-end",
-        "software engineer", "full stack", "fullstack", "developer",
+        "full stack", "fullstack", "software engineer", "developer",
+        "saas", "platform engineer",
+    ],
+    "seniority_keywords": [
+        "mid-level", "mid level", "senior", "sr.", "sr ", "6+ years", "5+ years",
     ],
     "negative_keywords": [
-        "junior", "intern", "ios", "android native", "frontend-only",
-        "front-end only", "design", "marketing", "sales",
+        "junior", "intern", "graduate trainee", "entry level", "entry-level",
+        "staff engineer", "staff software", "principal engineer", "principal software",
+        "director of engineering", "vp engineering", "head of engineering",
+        "ios", "android native", "frontend-only", "front-end only",
+        "design", "marketing", "sales",
     ],
     "preferred_locations": [
         "remote", "uae", "dubai", "abu dhabi", "qatar", "doha",
@@ -96,18 +104,20 @@ PROFILE = {
         "ireland", "malaysia", "singapore", "asia",
     ],
     "excluded_locations": [
-        "cairo only", "egypt onsite", "iran", "north korea",
+        "cairo only", "egypt onsite", "onsite cairo", "iran", "north korea",
     ],
     "sponsorship_keywords": [
         "visa sponsorship", "sponsorship available", "relocation",
         "visa provided", "work permit",
     ],
     "tech_stack_keywords": [
-        "asp.net core", ".net core", "entity framework", "ef core",
-        "sql server", "postgresql", "mongo", "redis",
-        "azure", "docker", "ci/cd",
-        "clean architecture", "microservices", "rest api", "restful",
-        "jwt", "multi-tenant",
+        "asp.net core", ".net core", ".net 9", "entity framework", "ef core",
+        "sql server", "postgresql", "postgres", "mongo", "mongodb", "redis",
+        "azure", "azure devops", "app service", "docker", "ci/cd", "github actions",
+        "clean architecture", "microservices", "saas", "multi-tenant", "multi tenant",
+        "rest api", "restful", "jwt", "identity", "rbac",
+        "hangfire", "xunit", "stripe", "payment gateway", "webhook", "idempotent",
+        "react", "typescript", "aws",
     ],
     "freelance_indicators": [
         "upwork", "toptal", "freelancer.com", "contra", "braintrust",
@@ -145,6 +155,42 @@ def load_config() -> list[dict[str, str]]:
             if enabled.lower() == "true":
                 rows.append(row)
     return rows
+
+
+def resolve_tavily_key() -> tuple[str, str]:
+    """Return (api_key, key_name) for the enabled row in tavily_keys.csv.
+
+    Actual secret values live in env / GitHub Actions secrets, never in the CSV.
+    Flip `enabled` in data/tavily_keys.csv to switch keys (exactly one should be true).
+    Falls back to TAVILY_API_KEY if the CSV is missing.
+    """
+    if not TAVILY_KEYS_CSV.exists():
+        return os.environ.get("TAVILY_API_KEY", ""), "TAVILY_API_KEY"
+
+    enabled: list[dict[str, str]] = []
+    with TAVILY_KEYS_CSV.open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            name = (row.get("name") or "").strip()
+            if not name or name.startswith("#"):
+                continue
+            if (row.get("enabled") or "").strip().lower() == "true":
+                enabled.append(row)
+
+    if not enabled:
+        sys.exit("❌ No enabled Tavily key in data/tavily_keys.csv (set enabled=true on one row).")
+    if len(enabled) > 1:
+        names = ", ".join(r.get("name", "?") for r in enabled)
+        print(f"⚠️  Multiple enabled Tavily keys ({names}); using {enabled[0].get('name')}")
+
+    row = enabled[0]
+    name = (row.get("name") or "").strip()
+    env_var = (row.get("env_var") or "").strip() or "TAVILY_API_KEY"
+    key = os.environ.get(env_var, "").strip()
+    if not key:
+        key = os.environ.get("TAVILY_API_KEY", "").strip()
+        if key:
+            print(f"⚠️  {env_var} empty; falling back to TAVILY_API_KEY for {name}")
+    return key, name
 
 
 def load_existing_listings() -> set[str]:
@@ -434,10 +480,14 @@ def score_result(title: str, url: str, content: str) -> tuple[int, str]:
     score = 0
     notes = []
 
-    # Hard rejects
+    # Hard rejects (junior/intern/over-senior/non-.NET roles)
     for neg in PROFILE["negative_keywords"]:
         if neg in text:
             return (1, "unknown")
+
+    # Seniority fit boost (Mid/Senior — 6+ yr profile)
+    if any(kw in text for kw in PROFILE.get("seniority_keywords", [])):
+        score += 1
 
     # Role match
     role_hits = sum(1 for kw in PROFILE["role_keywords"] if kw in text)
@@ -507,11 +557,9 @@ _FREELANCE_BOARDS = {
 
 
 def has_stack_signal(title: str, content: str, url: str = "") -> bool:
-    """True if title/snippet/url mentions .NET/C# or a PROFILE stack keyword."""
+    """True only if title/snippet/url mentions .NET / ASP.NET / C#."""
     text = f"{title} {content} {url}".lower()
-    if any(kw in text for kw in _STACK_CORE):
-        return True
-    return any(kw in text for kw in PROFILE["tech_stack_keywords"])
+    return any(kw in text for kw in _STACK_CORE)
 
 
 def fits_remote_or_visa(
@@ -523,8 +571,12 @@ def fits_remote_or_visa(
     board: str = "",
     source_type: str = "",
 ) -> bool:
-    """Keep remote / freelance / visa-friendly; drop onsite-only with no visa."""
-    text = f"{title} {content} {query_text}".lower()
+    """Keep remote / freelance / visa-friendly; drop onsite-only with no visa.
+
+    Uses title+content only for visa/sponsorship tokens — query text must not
+    auto-pass unrelated onsite results from a visa-scoped search.
+    """
+    result_text = f"{title} {content}".lower()
     loc = (location_filter or "").lower().strip()
     board_l = (board or "").lower().strip()
     source_l = (source_type or "").lower().strip()
@@ -533,15 +585,14 @@ def fits_remote_or_visa(
         return True
     if board_l in _FREELANCE_BOARDS or source_l == "freelance":
         return True
-    if "remote" in text:
+    if "remote" in result_text:
         return True
-    if any(kw in text for kw in PROFILE["sponsorship_keywords"]):
+    if any(kw in result_text for kw in PROFILE["sponsorship_keywords"]):
         return True
-    # Query/location often encodes visa intent ("Gulf visa", "sponsorship UAE").
-    if any(tok in text for tok in ("visa", "sponsorship", "sponsor")):
+    if any(tok in result_text for tok in ("visa", "sponsorship", "sponsor")):
         return True
     if loc in ("gulf", "uae", "ksa", "europe") and any(
-        tok in text for tok in ("visa", "sponsorship", "sponsor", "relocation")
+        tok in result_text for tok in ("visa", "sponsorship", "sponsor", "relocation")
     ):
         return True
     return False
@@ -1136,12 +1187,17 @@ def main():
     args = parser.parse_args()
 
     load_dotenv(ROOT / ".env")
-    tavily_key = os.environ.get("TAVILY_API_KEY", "")
+    tavily_key, tavily_key_name = resolve_tavily_key()
     tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 
     if not tavily_key and not args.dry_run:
-        sys.exit("❌ TAVILY_API_KEY not set. See .env.example.")
+        sys.exit(
+            f"❌ No value for enabled Tavily key '{tavily_key_name}'. "
+            "Set DEFAULT_TAVILY_KEY / PAYASYOUGO_TAVILY_KEY (see .env.example)."
+        )
+    if tavily_key:
+        print(f"🔑 Tavily key: {tavily_key_name} (enabled)")
 
     if args.query:
         queries = [{"query": args.query, "location_filter": "", "enabled": "true", "priority": "1"}]
